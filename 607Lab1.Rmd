@@ -1,0 +1,124 @@
+---
+title: "Latest US Presidential Election Polls"
+author: "Luis MG"
+date: "2024-09-01"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+This is a brief overview of the data from the latest polls regarding presidential elections in the US.
+For the complete article and source of the data please see
+
+<https://projects.fivethirtyeight.com/polls/>.
+
+This file will include R chunks to instruct how to load the data
+
+## Install / Load libraries
+Depending on what libraries are used, first load those, in this case we are loading dplyr and ggplot2
+
+```{r load packages, include=TRUE}
+library(dplyr)
+library(ggplot2)
+```
+
+## Specify the URL to raw CSV file from GitHub
+Since the data needs to be reproducible it will be pulled from a URL from Github
+```{r specify URL, include=TRUE}
+url <- "https://raw.githubusercontent.com/Lfirenzeg/msds607labs/main/president_polls.csv"
+```
+
+## Load the data into R
+We create a data called total_data_polls to reference the entirety of the original data set.
+```{r load data, include=TRUE}
+total_data_polls <- read.csv(url)
+```
+
+## View the first few rows of the data 
+Use the command *head* just to check that the data you want, to confirm it's loaded correctly
+```{r View first Rows, include=TRUE}
+head(total_data_polls)
+```
+
+## Select and rename the columns we are interested in
+However, the data above is too large to easily visualize, so the next step is to focus on a couple of columns. So we are going to create a new subset called main_data_polls
+ 
+```{r Select Rows, include=TRUE}
+main_data_polls <- total_data_polls %>%
+  select(state, start_date, end_date, sample_size, party, answer, candidate_id, candidate_name, pct)
+```
+
+That reduced the number of columns from 48 to 8.
+
+As an example to change the name of columns, let's change the names to make them easier to read.
+
+```{r rename Rows, include=TRUE}
+main_data_polls <- main_data_polls %>%
+  rename(
+    State = state,
+    Start_Date = start_date,
+    End_Date = end_date,
+    SampleSize = sample_size,
+    Party = party,
+    Choice = answer,
+    CandidateID = candidate_id,
+    CandidateName = candidate_name,
+    Percentage = pct
+  )
+```
+
+Let's see how the new rows are looking using the command *head*:
+
+```{r View New Rows, include=TRUE}
+head(main_data_polls)
+```
+
+## Generate a graph to visualize information
+Now that we have our subset ready let's create a graph. Fist, let's define the most recent poll dates as the ones that will be used to create the graph
+
+## Convert the date columns to Date type
+```{r convert dates, include=TRUE}
+main_data_polls$Start_Date <- as.Date(main_data_polls$Start_Date, format = "%m/%d/%Y")
+main_data_polls$End_Date <- as.Date(main_data_polls$End_Date, format = "%m/%d/%Y")
+```
+
+
+```{r set dates, include=TRUE}
+start_date <- as.Date("0024-08-29")  
+end_date <- as.Date("0024-08-31")    
+```
+
+## Filter the data for the specific period
+```{r filter dates, include=TRUE}
+filtered_data <- main_data_polls %>%
+  filter(Start_Date >= start_date & End_Date <= end_date)
+```
+
+And finally create the plot
+
+```{r create plot, include=TRUE}
+  ggplot(filtered_data, aes(x = State, y = Percentage, fill = Choice)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("Trump" = "red", "Harris" = "blue")) + 
+  geom_text(aes(label = paste0(Percentage, "%")), 
+            position = position_dodge(width = 0.9), 
+            vjust = -0.5, 
+            color = "black") +  # Add labels to the bars
+  labs(title = "Percentage of Voters Between Trump and Harris",
+       x = "State",
+       y = "Percentage of Voters") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+# Conclusions
+
+This data is limited to polls conducted between 08/29/2024 and 08/31/2024 in 5 states, with varying sample sizes. From the data is hard to determine how reliable the information is. However, as a first approach to working with creating ggplots and modifying tables in Rstudio it illustrates how easily everything can be customized. This also shows however, how data is presented is as or even more important than the data itself.
+A way to expand this search would be to include more polling sites, and rate how accurate their polling has in the past versus actual results.
