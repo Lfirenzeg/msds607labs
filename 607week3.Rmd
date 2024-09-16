@@ -1,0 +1,185 @@
+---
+title: "Week 3 - 607"
+author: "Luis Munoz Grass"
+date: "2024-09-15"
+output: html_document
+---
+
+## Exercise 1
+
+Using the 173 majors listed in fivethirtyeight.com’s College Majors dataset [https://fivethirtyeight.com/features/the-economic-guide-to-picking-a-college-major/], provide code that identifies the majors that contain either "DATA" or "STATISTICS"
+
+----------------------
+
+First, we'll load any needed libraries, in this case dplyr.
+
+```{r setup, include=FALSE}
+# Load necessary libraries
+library(dplyr)
+library(stringr)
+```
+
+Then, we can find the data used in the article by clicking on the link for GitHub under the main title. Then, we can load the college majors dataset from the url for the CSV file majors-list.csv
+
+```{r - Majors}
+url <- "https://raw.githubusercontent.com/fivethirtyeight/data/master/college-majors/majors-list.csv"
+majors <- read.csv(url)
+```
+
+If we want to check if we have loaded correctly the database we can use
+
+```{r - Check data}
+head(majors)
+```
+
+Then the actual code to filter data based on a key word, in this case Data or Statistics. Just to make sure that upper or lower case won't affect the results, we'll keep ignore.case as True.
+
+However, filter() alone would not be enough as it'd return only exact matches for the words given. It wouldn't capture variations with partial matches. 
+
+One solution would be to use the grepl() function, as it allows us to perform a partial text match. In this case we want any variations that have the word "Data" or "Statistics" within the column Major. 
+
+```{r Filter data}
+# Filter majors with the word "data" or "statistics" (disregarding upper or lower case)
+majors_data_or_stats <- majors %>%
+  filter(grepl("Data|Statistics", Major, ignore.case = TRUE))
+```
+
+Lastly, we visualize the results found
+
+```{r Visualize results}
+#Visualize filtered majors based on the key words
+majors_data_or_stats
+```
+
+## Exercise 2
+
+ Write code that transforms the data below:
+
+[1] "bell pepper"  "bilberry"     "blackberry"   "blood orange"
+
+[5] "blueberry"    "cantaloupe"   "chili pepper" "cloudberry"  
+
+[9] "elderberry"   "lime"         "lychee"       "mulberry"    
+
+[13] "olive"        "salal berry"
+
+Into a format like this:
+
+c("bell pepper", "bilberry", "blackberry", "blood orange", "blueberry", "cantaloupe", "chili pepper", "cloudberry", "elderberry", "lime", "lychee", "mulberry", "olive", "salal berry")
+
+-------------
+
+In this case, first we have to group the data provided into a group we'll call fruits
+
+```{r convert list}
+fruits <- c(
+  "bell pepper", "bilberry", "blackberry", "blood orange", 
+  "blueberry", "cantaloupe", "chili pepper", "cloudberry",  
+  "elderberry", "lime", "lychee", "mulberry",    
+  "olive", "salal berry"
+)
+```
+
+There is a function cat() that would print all the words into a single string, but would not separate them in the desired format
+
+```{r visualize fruit string}
+cat(fruits)
+```
+
+To get around this we'll use the paste() function, that concatenates all elements of a vector, in addition with ShQuote() function that adds quotes around each element so the result can look like "bell pepper". For the paste() function, we'll use collapse=", " so that each element is separated by a comma. 
+
+```{r format string}
+fruits_format <- paste(shQuote(fruits), collapse = ", ")
+```
+
+Putting all of that together, and the using the cat() function to create a single string we'll have:
+
+```{r visualize new fruit string}
+cat(fruits_format)
+```
+
+Now, if we are being very literal with the prompt given (or maybe just for fun) and we want to include the c ( ) in the final result to be visualized we can use the paste function one more time. 
+
+```{r c format string}
+fruits_c_format <- paste("c(", fruits_format, ")")
+```
+
+And then we visualize that:
+```{r visualize C fruit string}
+cat(fruits_c_format)
+```
+
+
+## Exercise 3
+Describe, in words, what these expressions will match:
+
+First expression: (.)\1\1
+Second expression: "(.)(.)\\2\\1"
+Third expression: (..)\1
+Fourth expression: "(.).\\1.\\1"
+Fifth expression: "(.)(.)(.).*\\3\\2\\1"
+------------------
+
+1) The first expression (.)\1\1 matches any character in a string that is repeated 3 times consecutively. For example, if a string is Caaamp, it would return "aaa"
+
+2) The second expression "(.)(.)\\2\\1" matches a string with 4 characters, where the first and second symbol can really be anything, and the last 2 symbols must mirror the first 2 symbols. For exmaple, it would match a string "hggh", or "7777".
+
+3) The third expression (..)\1 matches any two characters repeated consecutively. For example, it would match a string "anan" in Banana, or "coco" in coconut
+
+4) The fourth expression "(.).\\1.\\1" matches a five character string where the first, third and fifth characters are the same. For example ababa, or 15161.
+
+5) The fifth expression "(.)(.)(.).*\\3\\2\\1" matches a string where the first 3 symbols are mirrored later in reverse. For example abcdoncba.
+
+
+## Exercise 4
+
+Construct regular expressions to match words that:
+
+- Start and end with the same character.
+- Contain a repeated pair of letters (e.g. "church" contains "ch" repeated twice.)
+- Contain one letter repeated in at least three places (e.g. "eleven" contains three "e"s.)
+
+---------------------------
+
+For this section stringr is needed
+
+
+install.packages("stringr")
+
+library(stringr)
+
+
+1) Matching words that start and end with the same character:
+
+Given that ^ selects the start of the string,  (.) captures any character as the first character, .* matches any sequence of characters, "\1" refers to the first captured character, and $ denotes the end of the string. 
+
+An example of using the expression: "^(.)((.*\\1$)|\\1?$)"
+
+```{r match start and end}
+start_end <- c("radar", "gym", "level", "test", "coffee")
+
+str_subset(start_end, "^(.)((.*\\1$)|\\1?$)")
+
+```
+
+
+2) To match words containing a repeated pair of letters:
+
+Using A-Za-z ensures that upper or lower case are matched anyway.
+
+```{r repeat pair of letter}
+example <- c("church", "hello", "london", "test", "refer", "success", "chacha")
+
+#A-Za-z is used twice to represent the pair of consecutive letters. Then the expression
+# *\\1 is used like in the previous exercises.
+str_subset(example, "([A-Za-z][A-Za-z]).*\\1")
+```
+
+3) To match words that contain one letter repeated in at least 3 places:
+
+Putting together regular expresions from previous exercises we can start with A-Za-z, then use .* to match any sequence of character, and then use \\1 to reference the first captured group of A-Za-z, which would look like:
+
+```{r repeat letter 3 places}
+example <- c("church", "hello", "london", "Banana", "refer", "success", "chacha")
+str_subset(example, "([A-Za-z]).*\\1.*\\1")
+```
