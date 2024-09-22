@@ -1,0 +1,139 @@
+---
+title: "Chess ratings"
+author: "Luis Munoz Grass"
+date: "2024-09-21"
+output: html_document
+---
+
+For this project we’re given a text file with chess tournament results where the information has some structure. The idea is to create an R Markdown file that generates a .CSV file with the following information for all of the players:
+Player’s Name
+Player’s State
+Total Number of Points
+Player’s Pre-Rating
+Average Pre Chess Rating of Opponents
+
+For the first player, the information would be:
+Gary Hua, ON, 6.0, 1794, 1605
+
+1605 was calculated by using the pre-tournament opponents’ ratings of 1436, 1563, 1600, 1610, 1649, 1663, 1716, and dividing by the total number of games played.
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE}
+
+library(stringr)
+```
+
+## Import data from tournament info text file.
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE}
+chesstour <- read.csv(paste0("https://raw.githubusercontent.com/Lfirenzeg/msds607labs/refs/heads/main/tournamentinfo.txt"), header=FALSE)
+```
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE}
+## Remove header rows.
+chesstour <- chesstour[-c(1:4),]
+```
+
+
+We can use head() to check if the first 4 rows were removed successfully.
+```{r, eval=TRUE, message=FALSE, warning=FALSE}
+head(chesstour)
+```
+
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE}
+## Select sequential pieces for each player info and its rating into different data frames.
+PlyInfo <- chesstour[seq(1,length(chesstour),3)]
+RtiInfo <- chesstour[seq(2,length(chesstour),3)]
+```
+
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE}
+## Further extract required elements for this project.
+  #### Extract player's number and convert its character type to integer.
+  Player_Number <- unlist(str_extract(PlyInfo,"[[:digit:]]{1,2}"))
+  Player_Number <- as.integer(Player_Number)
+```
+
+  
+```{r, eval=TRUE, message=FALSE, warning=FALSE}
+  #### Extract player's name.
+  Player_Name <- unlist(str_extract(PlyInfo,"[[:alpha:]]{2,}.{1,}([[:alpha:]]{2,})"))
+```
+
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE}    
+  #### Extract player's points and convert its character type to numeric.
+  Player_Points <- unlist(str_extract(PlyInfo,"[[:digit:]]{1}\\.[[:digit:]]{1}"))
+  Player_Points <- as.numeric(Player_Points)
+```
+  
+  
+```{r, eval=TRUE, message=FALSE, warning=FALSE}
+  #### Extract player's state.
+  Player_State <- unlist(str_extract(RtiInfo,"[[:alpha:]]{1,2}"))
+```  
+
+
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE}  
+  #### Extract player's pre-rating and using sub function to find and remove ": " and then convert to        numeric.
+  Player_Rating <- unlist(str_extract(RtiInfo, ":\\s{1,}[[:digit:]]{3,4}"))
+  Player_Rating <- sub(":\\s{1,}","",Player_Rating)
+  Player_Rating <- as.numeric(Player_Rating)
+```
+  
+  
+```{r, eval=TRUE, message=FALSE, warning=FALSE}    
+  #### Extract each player's opponents' number.
+  Opponents_Number <- str_extract_all(PlyInfo, "[[:digit:]]{1,}\\|")
+  Opponents_Number <- str_extract_all(Opponents_Number, "[[:digit:]]{1,}")
+```
+  
+  
+```{r, eval=TRUE, message=FALSE, warning=FALSE}    
+  #### Calculate the sum of Win, Lose, and Draw counts for each player.
+  Player_GamesCount <- str_count(PlyInfo, "\\|W") + str_count(PlyInfo, "\\|L") + str_count(PlyInfo, "\\|D")
+```
+  
+      
+  
+```{r, eval=TRUE, message=FALSE, warning=FALSE}
+  #### Calculate the sum of opponents' rating for each player.
+  Player_TotalRating <- length(Player_Number)
+  
+   for (i in 1:length(Player_Number))
+   { 
+          Player_TotalRating[i] <-  sum(Player_Rating[as.numeric(unlist(Opponents_Number[Player_Number[i]]))])
+          
+   }
+```
+
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE}     
+  #### Calculate the average pre chess rating of opponents for each player.
+  Player_AverageRating <- round(Player_TotalRating/Player_GamesCount,0)
+```
+
+  
+```{r, eval=TRUE, message=FALSE, warning=FALSE} 
+## Combine above data frames.
+chesstour_summary <- cbind.data.frame(Player_Name,Player_State,Player_Points,Player_Rating, Player_AverageRating)
+```
+
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE} 
+## Update the columns' names.
+colnames(chesstour_summary) <- c("Player’s Name", "Player’s State", "Total Number of Points", "Player’s Pre-Rating", "Average Pre Chess Rating of Opponents")
+```
+
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE}
+## Display few rows of the summary results.
+head(chesstour_summary)
+```
+
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE}   
+## Export the summary to a CSV file.
+write.csv(chesstour_summary,'ChesstourSummary.csv')
+```
