@@ -1,0 +1,145 @@
+---
+title: "Airlines Delays"
+author: "Luis Munoz Grass"
+date: "2024-09-29"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+##Assignment – Tidying and Transforming Data
+
+For this assignment we are starting with a CSV file with a wide structure. The task is to tidy it and transform it so it's easier to analyze.
+
+The data used for this assignment is describes arrival delays for two airlines across five destinations.
+
+First we'll load needed libraries.
+
+```{r, load library}
+library(tidyverse)
+library(dplyr)
+library(knitr)
+```
+
+Second we'll load data, in this case from github.
+
+```{r, load data}
+airlines <- read.csv("https://raw.githubusercontent.com/Lfirenzeg/msds607labs/refs/heads/main/airlines.csv")
+
+# View the first few lines to inspect the data
+head(airlines)
+```
+
+Next we'll rename some columns
+
+```{r, name columns}
+colnames(airlines) <- c("Airline", "Status", "Los.Angeles", "Phoenix", "San.Diego", "San.Francisco", "Seattle")
+
+# View the first few lines to inspect the data
+head(airlines)
+```
+
+
+Remove the 4th empty row if it exists
+```{r, remove empty row}
+airlines <- airlines %>% filter(!(Airline == "" & Status == ""))
+
+# View the first few lines to inspect the data
+head(airlines)
+```
+
+Fill the missing airline names downwards, but first we have to replace missing values or currently empty strings, with NA so that fill() can work
+
+```{r, add airlines names}
+# Replace empty strings with NA
+airlines$Airline[airlines$Airline == ""] <- NA
+
+airlines <- airlines %>%
+  fill(Airline, .direction = "down")
+
+# View the first few lines to inspect the data
+head(airlines)
+```
+
+Now we'll reshape the data to long format to include city and count columns
+
+```{r, long format}
+tidy_airlines <- airlines %>%
+  pivot_longer(cols = c("Los.Angeles", "Phoenix", "San.Diego", "San.Francisco", "Seattle"),
+               names_to = "City",
+               values_to = "Count") %>%
+ group_by(Airline, Status, City) %>%
+  summarise(Total_Flights = sum(Count, na.rm = TRUE), .groups = 'drop')
+
+# View the first few lines to inspect the data
+print(tidy_airlines)
+```
+
+Now that the table was transformed from a wide format to a long one, let's see what the data can tell us about airlines' delays.
+
+
+```{r, visualize data for on time vs delayed totals}
+# First calculate the percentage of on-time and delayed flights for each airline
+flight_summary <- tidy_airlines %>% #create a new table with the summary
+  group_by(Airline, Status) %>% #the new table will have totals for airlines and status
+  summarise(Count = sum(c_across(where(is.numeric)), na.rm = TRUE)) %>%  #sums up the numeric columns for flight counts
+  group_by(Airline) %>%
+  mutate(Total = sum(Count),  #calculate total flights per airline
+         Percentage = (Count / Total) * 100)  # Calculate percentage
+
+flight_summary$Status <- factor(flight_summary$Status, levels = c("On Time", "Delayed"))
+
+# With the summary table created we can now create a bar plot with ggplot
+ggplot(flight_summary, aes(x = Airline, y = Percentage, fill = Status)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = paste0(round(Percentage, 1), "%")),  # Add percentage labels to the bars
+            position = position_dodge(width = 0.9), vjust = -0.5, size = 3.5) +  # Adjust position of labels
+  labs(title = "Percentage of On-Time vs Delayed Flights by Airline",
+       x = "Airline", y = "Percentage (%)") +
+  scale_fill_manual(values = c("On Time" = "springgreen3", "Delayed" = "tomato3")) +  # Customize colors
+  theme_minimal()
+```
+
+As the  graph shows us, both airlines have very similar percentages of on-time versus delayed flight totals, with AM West having slightly more on time flights overall. 
+
+But what if I we break down the data by cities?
+
+```{r, graph for cities}
+#Calculate the percentage of on-time and delayed flights for each city
+city_summary <- tidy_airlines %>%
+  group_by(City, Status, Airline) %>%  # Include Airline in the grouping
+  summarise(Total_Flights = sum(Total_Flights, na.rm = TRUE), .groups = 'drop') %>%
+  group_by(City, Airline) %>%  
+  mutate(Total_City_Flights = sum(Total_Flights),
+         Percentage = (Total_Flights / Total_City_Flights) * 100)
+
+#Create the bar plot with ggplot
+ggplot(city_summary, aes(x = City, y = Percentage, fill = Airline)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.7)) +
+  geom_text(data = filter(city_summary, Status == "On Time"), 
+            aes(label = paste0(round(Percentage, 1), "%")),
+            position = position_dodge(width = 0.8), vjust = -0.4, size = 3.0) +  # Add percentage labels
+  labs(title = "On-Time Flights by City and Airline",
+       x = "City", y = "Percentage (%)") +
+  scale_fill_manual(values = c("Alaska" = "royalblue4", "AM West" = "sienna3")) +  # Set airline colors
+  theme_minimal()
+```
+
+Surprisingly, for each city, Alaska Airlines tends to have more on-time flights than America West Airlines. Why is this? 
+
+```{r}
+print (airlines)
+```
+If we see the total number of flights to Phoenix for AM West, we can see that is by fart the biggest count in the entire table, adding a lot more weight to their average "on-time" status. 
+
+AM West on time flights average: 89.1%
+AM West on time flights Phoenix: 92.1%
+
+Phoenix was the best performing route both for AM West and Alaska, but since AM West had significantly more flights there than Alaska, it skewed the data heavily in their favor. 
+
+At the same time, both San Francisco and Seattle were the worst performing routes for both airlines, but this time it was Alaska that had the most number of flights to those cities. 
+
+##Conclusion
+If we only look at total averages AM West seems to be more reliable than Alaska Airlines. But looking more carefully at each city's data we can see that Alaska actually is the one performing better in each scenario.
+Since we don't know the city(es) of origin or the time of year it's difficult to make a definitive statement, but based on this data only Alaska seemed to be more reliable in terms having On Time flights
+
