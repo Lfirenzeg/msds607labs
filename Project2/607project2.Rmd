@@ -1,0 +1,431 @@
+---
+title: "Project 2"
+author: "Luis Munoz Grass"
+date: "2024-10-06"
+output: html_document
+---
+
+## 1st Data Set
+
+## Storm Surges
+The first dataset to modify will be coming from the Meterological Developmental Laboratory, provided by author of the post Kimberly Koon.
+
+The author focuses on ideas to transform the data:
+"The data is untidy in many ways - for instance, the tables are broken up into years, with each year having its own table. The first column follows the format Year - Storm, and then the rows also contain the year with the name of the storm.  This column also appears to have certain tags, like (R) for retired name.  Some of the formats are not consistent, such as having "'18-Storm Name" versus "2018-Storm Name".  Date ranges are stored in a "Date" column rather than in a "Storm Date Start" and "Storm Date End" column.  The Surge data seems to be inconsistent in units between the tables, with Above Ground Level and Mean Higher High Water used.   The Obs column has comma delimited lists, and the Cat,Pres,Dead,$bn column is for some reason one single column instead of having four columns for each variable.  Area is also a comma delimited list, and for some reason the area is inconsistent in terms of State, City, etc."
+
+First we'll load the libraries needed
+
+```{r, load libraries}
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(lubridate)
+library (ggplot2)
+```
+
+Second we'll load the data from a CSV file hosted on github.
+
+```{r, load data}
+storms <- read.csv("https://raw.githubusercontent.com/Lfirenzeg/msds607labs/refs/heads/main/Project2/stormdata.csv")
+
+head (storms)
+```
+
+Please note that for this exercise I'll be focusing on transforming the data for year 2024.
+
+I will start by getting rid of the columns Obs and Guidance
+
+```{r, drop columns}
+# Remove the "Obs" and "Guidance" columns
+storms <- storms %>%
+  select(-Obs, -Guidance)
+```
+
+
+Now, I want to split a column that 4 different types of information into 4 different columns
+
+```{r, create columns}
+# Separate the "Cat, Pres, Dead, $bn" column into four separate columns
+storms <- storms %>%
+  separate(`Cat..Pres..Dead...bn`, into = c("Category", "Pressure", "Deaths", "Cost"), sep = ", ", fill = "right", extra = "merge")
+```
+
+And I want to transform the First column to only get the names and remove 2024-
+
+```{r, change 2024 storm}
+# Remove "2024-" prefix from the "2024-Storm" column
+storms <- storms %>%
+  mutate(`X2024.Storm` = str_replace(`X2024.Storm`, "^2024-", ""))
+
+head(storms)
+```
+
+For the column Category, I want to remove "(Cat", but double backslashes are needed to escape the parenthesis \\
+
+```{r, change Category}
+# Remove "(Cat" prefix from the "Category" column
+storms <- storms %>%
+  mutate(`Category` = str_replace(`Category`, "\\(Cat", ""))
+```
+
+Rename Area as States Impacted
+
+```{r rename column states}
+# Rename the "Area" column to "States Impacted"
+storms <- storms %>%
+  rename(`States Impacted` = Area)
+```
+
+Remove empty rows
+
+```{r, remove empty rows}
+storms <- storms %>%
+  filter(!(is.na(`Cost`)))
+
+head(storms)
+```
+
+For the column cost there are a lot of symbols that I'd like to remove. In this case we'll check for just numbers and remove everything else. 
+```{r, clean Cost Column}
+storms <- storms %>%
+  mutate(Cost = str_replace_all(Cost, "[^0-9.]", ""),  # Remove non-numeric characters except for period (.)
+         Cost = as.numeric(Cost),  # Convert to numeric type
+         Cost = ifelse(is.na(Cost), "No data", Cost))  # Replace NA with "No data         available"
+```
+
+Now, convert the column Storm.Tide so that it only keeps a numeric value, in this case we can easily do this by finding the numeric values right before mhhw. 
+
+```{r, clean Storm.Tide}
+storms <- storms %>%
+  mutate(Storm.Tide = str_extract(Storm.Tide, "\\d+\\.?\\d*(?= mhhw)"))
+
+# Convert the extracted values to numeric type if needed
+storms <- storms %>%
+  mutate(Storm.Tide = as.numeric(Storm.Tide))
+```
+
+Next, we'll transform the column Deaths so that the values are only numeric
+
+```{r Clean Category}
+storms <- storms %>%
+  mutate(Deaths = str_replace_all(Deaths, "\\+", "") %>% as.numeric(),
+         Deaths = ifelse(is.na(Deaths), "No data", Deaths))  # Replace NA with "No data")
+```
+
+Finally, and perhaps the most time consuming step is to check for different formats of dates and then standardize them. In this case, to simplify the proces we used ChatGPT to detect the different formats that exist in the data set, and asked to generate code that would help us standardize it into mm/dd/yyyy.
+The prompt used was: Look for existing formats used in the data set for the column Date, and create code that applies to all the cases so that no value is lost and it can all be standardized to mm/dd/yyyy. 
+
+```{r, fix dates}
+storms <- storms %>%
+  mutate(Date = case_when(
+    # Format: "Sep 23-29" -> Convert to "09/23/2024" (taking the first day of the range)
+    str_detect(Date, "[A-Za-z]{3} \\d{1,2}-\\d{1,2}") ~ paste0(str_pad(month(ymd(paste0("2024-", str_extract(Date, "^[A-Za-z]+"), "-01"))), 2, pad = "0"), "/",
+                                                              str_extract(Date, "\\d{1,2}"), "/2024"),
+    
+    # Format: "12-Sep" -> Convert to "09/12/2024"
+    str_detect(Date, "\\d{1,2}-[A-Za-z]{3}") ~ paste0(str_pad(month(ymd(paste0("2024-", str_extract(Date, "[A-Za-z]{3}"), "-01"))), 2, pad = "0"), "/",
+                                                      str_extract(Date, "\\d{1,2}"), "/2024"),
+    
+    # Format: "Aug 5,6" -> Convert to "08/05/2024" (taking the first day only)
+    str_detect(Date, "[A-Za-z]{3} \\d{1,2},\\d{1,2}") ~ paste0(str_pad(month(ymd(paste0("2024-", str_extract(Date, "^[A-Za-z]+"), "-01"))), 2, pad = "0"), "/",
+                                                              str_extract(Date, "\\d{1,2}"), "/2024"),
+    
+    # Format: "8-Jul" -> Convert to "07/08/2024"
+    str_detect(Date, "\\d{1,2}-[A-Za-z]{3}") ~ paste0(str_pad(month(ymd(paste0("2024-", str_extract(Date, "[A-Za-z]{3}"), "-01"))), 2, pad = "0"), "/",
+                                                      str_extract(Date, "\\d{1,2}"), "/2024"),
+    
+    # Format: "Jun 19,20" -> Convert to "06/19/2024" (taking the first day only)
+    str_detect(Date, "[A-Za-z]{3} \\d{1,2},\\d{1,2}") ~ paste0(str_pad(month(ymd(paste0("2024-", str_extract(Date, "^[A-Za-z]+"), "-01"))), 2, pad = "0"), "/",
+                                                              str_extract(Date, "\\d{1,2}"), "/2024"),
+    
+    TRUE ~ Date  # Retain original date if it doesn't match any of the above patterns
+  ))
+
+head(storms)
+```
+
+This completes the transformation of the data for the first wide dataset.
+In the discussion, the author focuses more on what clean up is needed. In this case, we can look if there's a correlation between category and Storm Tide
+
+
+```{r, correlation}
+storms <- storms %>%
+  mutate(Category = as.numeric(Category))
+
+# Remove rows with NA values in Storm.Tide or Category
+storms_complete <- storms %>%
+  filter(!is.na(Storm.Tide) & !is.na(Category))
+
+
+correlation <- cor(storms_complete$Storm.Tide, storms_complete$Category, use = "complete.obs")
+
+print(paste("Correlation between Storm Tide and Category: ", correlation))
+```
+
+### Conclusion
+
+In this case we found a correlation of 0.5742, indicating there is some degree of association between the severity of a hurricane (measured by its category) and the storm tide heights. This means stronger hurricanes (higher category numbers) are associated with higher storm tides. However, the correlation is not very high, which means other factors might also be influencing storm tide levels.
+
+
+
+Now, on to our second data set
+
+## 2nd Data Set
+
+## Employee Salaries 2023
+
+The second dataset to modify will be coming from the government website from Montgomery, Maryland, provided by Crystal Quezada, which discusses the yearly employee salaries for government officials in Montgomery County, MD.
+
+Since we have previously loaded needed libraries in this file we can now go directly to loading the data from our trusted GitHub site.
+
+```{r, load salaries data}
+salaries <- read.csv("https://raw.githubusercontent.com/Lfirenzeg/msds607labs/refs/heads/main/Project2/EmployeeSalaries-2023.csv")
+
+head (salaries)
+```
+
+Thankfully, this dataset is already pretty organized, so any needed transformations will be purely based on what the author of the post describes:
+
+"The grade column does not contain a typical letter grade, but some have numbers and letters. Others are "NULL". Naturally, I would filter observations with NULL grades, and overtime and longevity pays at zero. Not only that but, it has over 10,000 observations so to make specified analysis I would filter wages by whole number and a salary between 50 and 150k."
+
+Let's start with removing the entries that a NULL value in the column Grades.
+
+```{r, remove NULL in Grade}
+# Create new table called salaries_clean
+salaries_clean <- salaries %>%
+  filter(Grade != "NULL")
+
+# View the cleaned data
+head(salaries_clean)
+
+```
+
+Now we have a tabled called salaries_clean and the previous code removed 33 entries.
+
+The author describes also removing overtime and longevity pay that contain a value of zero. But I believe that since there is a column called base_salary, for calculations that we want to do excluding people that have any type of additional values in overtime or longevity, it can be completed as is.
+
+Instead I would propose to create a new column called total_compensation, that adds up the values in base_salary, overtime and longevity_pay. That way we can compare, for example, if there are any differences between genders based only on base salary. And, in case there are any differences, check if they increase or decrease when factoring in total compensation.
+
+Let's create the new column first.
+
+```{r, total compensation}
+salaries_clean <- salaries_clean %>%
+  mutate(Total_Compensation = Base_Salary + Overtime_Pay + Longevity_Pay)
+
+head(salaries_clean)
+```
+
+Now let's summarize the data
+
+```{r, calculate average and median base salaries}
+salary_summary <- salaries_clean %>%
+  group_by(Gender) %>%
+  summarize(Avg_Base_Salary = mean(Base_Salary, na.rm = TRUE),  # Calculate average base salary
+            Median_Base_Salary = median(Base_Salary, na.rm = TRUE),  # Calculate median base salary
+            Avg_Total_Comp = mean(Total_Compensation, na.rm = TRUE),  # Calculate average total compensation
+            Median_Total_Comp = median(Total_Compensation, na.rm = TRUE)  # Calculate median total compensation
+            ) %>%
+  # Reshape the data to have one column for the "Stat" (Average/Median) and another for "Compensation"
+  pivot_longer(cols = c(Avg_Base_Salary, Median_Base_Salary, Avg_Total_Comp, Median_Total_Comp), 
+               names_to = "Stat", 
+               values_to = "Compensation")
+
+print(salary_summary)
+```
+
+And now on to plotting the summary found: 
+
+```{r, Base salary, avg and median by gender}
+ggplot(data = salary_summary, aes(x = Stat, y = Compensation, fill = Gender)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Average and Median Compensantion by Gender",
+       x = "Statistic",
+       y = "Base Salary ($)") +
+  theme_minimal()
+```
+
+The plot shows that Men have higher base salaries on average than Women. However, this difference is more pronounced when factoring in overtime and longevity pay. But why is that? Is it a matter of amount of employees having access to this additonal pay? To check this we can count how many employees in total get overtime and longevity pay, and group them by gender. We'll include a total number of employees to provide context.
+
+```{r, amount people overtime and logevity}
+pay_summary <- salaries_clean %>%
+  group_by(Gender) %>%
+  summarize(
+    Total_Employees = sum(Base_Salary > 0, na.rm = TRUE),  #Count total employees with base salary > 0
+    Employees_with_Overtime_Pay = sum(Overtime_Pay > 0, na.rm = TRUE),  #Count employees with overtime pay > 0
+    Employees_with_Longevity_Pay = sum(Longevity_Pay > 0, na.rm = TRUE)  #Count employees with longevity pay > 0
+  ) %>%
+  mutate(
+    Proportion_with_Overtime_Pay = Employees_with_Overtime_Pay / Total_Employees * 100,  # Proportion for Overtime Pay
+    Proportion_with_Longevity_Pay = Employees_with_Longevity_Pay / Total_Employees * 100  # Proportion for Longevity Pay
+  )
+print(pay_summary)
+```
+
+Let's transform that table from a wide format to long format, to make it easier to plot, removing count values, and leaving only percentages
+
+```{r, pay summary long}
+pay_summary_long <- pay_summary %>%
+  # Select only the proportion columns for reshaping
+  pivot_longer(cols = c(Proportion_with_Overtime_Pay, Proportion_with_Longevity_Pay), 
+               names_to = "Pay_Type", 
+               values_to = "Percentage")
+```
+
+Finally, let's create a new plot to visualize the proportions found.
+
+```{r, plot count pay gender}
+ggplot(data = pay_summary_long, aes(x = Pay_Type, y = Percentage, fill = Gender)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Proportion of Employees with Overtime and Longevity Pay by Gender",
+       x = "Pay Type",
+       y = "Percentage (%)") +
+  theme_minimal()
+```
+In this case the plot shows us that there's a significant difference between men and women regarding how many of them get Overtime Pay (70.26% Vs 34.18%). This seems to be the main factor impacting the difference between both genders in total compensation. Longevity pay also tends to favor men slightly more (28.77% vs 26.12%), but is not as clearly marked as overtime. 
+
+### Conclusion
+The data shows that when comparing base salaries between men and women, men have on average slightly higher base salaries than women. Additionally, more men than women (in proportion and total count) get overtime pay and longevity pay, bringing the average total compensation higher for men than for women.
+Future studies could look into what are factors impacting access to overtime pay. Is it a matter of additional responsibilities outside work? Reduced availability for overtime opportunities?
+
+
+Let's move on to our final data set
+
+## 3rd Data Set
+
+## Buffalo Blizzards
+
+The third data set to modify will be coming from information posted on the class forum, provided by author Kevin Havis, which contains recorded snowfall by month in Buffalo from the National Weather Association from 1940 until 2024.
+
+
+Since we have previously loaded needed libraries in this file we can now go directly to loading the data from our trusted GitHub site.
+
+```{r, load buffalo data }
+snowfall <- read.csv("https://raw.githubusercontent.com/Lfirenzeg/msds607labs/refs/heads/main/Project2/Snow-records-buffalo.csv")
+
+head (snowfall)
+```
+
+When we visualize this data set, we can see that is mostly organized. There are rows that need to be removed, as it repeats the header on at least 5 occasions. Additionally, we see that there are several values T in the data. What does that mean?
+
+Years of studying meterology (which I don't have), plus a quick google search (which I did) explain that the letter "T" typically stands for "Trace". This indicates that a very small amount of snowfall was recorded—too small to be measured accurately. For example, "T" might mean that there was a dusting of snow, but not enough to reach a measurable quantity such as 0.1 inches or more.
+
+So, what to do with this value? If we consider the T insignificant and replace with a 0 we might be underestimating the snowfall total. Including a small value instead (0.05) is suggested, as it would provide a more accurate reflection of the trace snowfall.
+
+First, let's remove the repeat Season rows
+
+```{r, remove Season rows}
+snowfall_clean <- snowfall %>%
+  filter(SEASON != "SEASON")
+```
+
+Some values have typos in their format, for example 2,.5. If we replaced the Ts now those cases would become NAs. To fix this we can remove comas in the middle of the numbers first
+
+```{r, remove comas}
+snowfall_clean <- snowfall_clean %>%
+  mutate(across(JUL:ANNUAL, ~ str_replace_all(., ",", "")))  # Removes commas
+
+snowfall_clean <- snowfall_clean %>%
+  mutate(across(JUL:ANNUAL, ~ str_replace_all(., "\\.{2,}", ".")))  # Replaces two or more periods with one
+```
+
+Now, let's replace T symbols with 0.05
+
+```{r, replacing T with small value}
+snowfall_clean <- snowfall_clean %>%
+  mutate(across(JUL:ANNUAL, ~ ifelse(. == "T", 0.05, as.numeric(.))))
+```
+
+Finally let's check if there are any NAs values left
+
+```{r, count NAs}
+remaining_issues <- snowfall_clean %>%
+  summarise(across(JUL:ANNUAL, ~ sum(is.na(.))))
+
+print(remaining_issues)
+```
+
+The only NA value left is for June of 2024, which did not have data, but based on historical data we can replace it with a 0.
+
+```{r replace NAs with 0 for snowfall}
+snowfall_clean <- snowfall_clean %>%
+  mutate(JUN = ifelse(is.na(JUN), 0, JUN))
+```
+
+For the Column Season, let's replace the values that currently give a range, with just the year that season begins. For example 1940-41 will now appear as 1940.
+
+```{r, reformat seasons to years}
+snowfall_clean <- snowfall_clean %>%
+  mutate(SEASON = str_extract(SEASON, "^\\d{4}"))
+```
+
+Now, let's remove the columns that only have 0s, since we can just ignore that now if it's the case for all the years of data.
+
+```{r remove months with just 0}
+snowfall_clean <- snowfall_clean %>%
+  select_if(~ !all(. == 0))
+
+head(snowfall_clean)
+```
+
+That removed 3 columns, helping reduce how wide the table is.
+
+Now let's get to analyze the data and start creating some summary tables. 
+We want to know:
+-Total of snowfall (in inches) per month
+-Min and Max value of the whole table
+-Avg and Median values per month, and in total.
+
+
+Let's get the total snowfall per month
+```{r total snowfall per month}
+total_snowfall_per_month <- snowfall_clean %>%
+  summarize(across(SEP:ANNUAL, \(x) sum(x, na.rm = TRUE)))
+
+print(total_snowfall_per_month)
+```
+
+In total, January is the month that has had the most recorded snowfall in Buffalo (2106.7), followed by December (1960.8), February (1533), March (1010.2) and November (858.4)
+
+```{r Avg and Median snowfall per month}
+avg_snowfall_per_month <- snowfall_clean %>%
+  summarize(across(SEP:ANNUAL, \(x) mean(x, na.rm = TRUE)))
+
+median_snowfall_per_month <- snowfall_clean %>%
+  summarize(across(SEP:ANNUAL, \(x) median(x, na.rm = TRUE)))
+
+cat("\nAverage Snowfall Per Month (inches):\n")
+print(avg_snowfall_per_month)
+
+cat("\nMedian Snowfall Per Month (inches):\n")
+print(median_snowfall_per_month)
+```
+On average, January is the month with most snowfall (25.01 inches of snow), closely followed by December (23.34 inches of snow).
+
+Let's find Min and Max total values per month, combine those tables into one, and transform from wide to long format.
+
+```{r Min Max values snowfall}
+# Minimum Value Per Month (Excluding ANNUAL)
+min_snowfall_per_month <- snowfall_clean %>%
+  summarize(across(SEP:MAY, \(x) min(x, na.rm = TRUE))) %>%
+  mutate(Statistic = "Min")
+
+# Maximum Value Per Month (Excluding ANNUAL)
+max_snowfall_per_month <- snowfall_clean %>%
+  summarize(across(SEP:MAY, \(x) max(x, na.rm = TRUE))) %>%
+  mutate(Statistic = "Max")
+
+combined_snowfall <- bind_rows(min_snowfall_per_month, max_snowfall_per_month)
+
+combined_snowfall_long <- combined_snowfall %>%
+  pivot_longer(cols = SEP:MAY, names_to = "Month", values_to = "Snowfall")  # Convert wide to long format
+
+final_snowfall_summary <- combined_snowfall_long %>%
+  pivot_wider(names_from = Statistic, values_from = Snowfall)
+
+print(final_snowfall_summary)
+```
+
+## Conclusion 
+The author challenged the class to find the worst snowfall month for Buffalo. With the Min-Max table we found the value 82.7 which corresponds to December of 2001, followed by January of 1976 with 68.3
+
+
