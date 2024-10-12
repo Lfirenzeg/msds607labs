@@ -21,12 +21,16 @@
   </book>
   
   <book>
-    <title>Harry Potter &amp; the Goblet of Fire</title>
-    <author>JK Rowling</author>
+    <title>Neuropsychology of Everyday Functioning</title>
+    <authors>
+	<author>Thomas D. Marcotte</author>
+	<author>Maureen Schmitter-Edgecombe</author>
+	<author>Igor Grant</author>
+    </authors>
     <attributes>
-      <attribute>Universe building</attribute>
-      <attribute>Magic</attribute>
-      <attribute>Tournament</attribute>
+      <attribute>Neuropathology</attribute>
+      <attribute>Neuropsychological Tests</attribute>
+      <attribute>Assessments</attribute>
     </attributes>
   </book>
 </coolbooks>
