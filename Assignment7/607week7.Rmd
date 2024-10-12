@@ -1,0 +1,156 @@
+---
+title: "Cool Books"
+author: "Luis Munoz Grass"
+date: "2024-10-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Working with HTML, XML, and JSON in R
+
+The task for this assignment was to pick three favorite books on one of your favorite subjects. At least one of the books should have more than one author. For each book, include the title, authors, and two or three other attributes that you find interesting.
+Take the information selected about these three books, and separately create three files which
+store the book’s information in HTML (using an html table), XML, and JSON formats (e.g. “books.html”,
+“books.xml”, and “books.json”).
+
+Now that the previous steps are done, we'll load the needed libraries to handle the files.
+
+```{r, load libraries}
+library(httr) #To download files from URLs
+library(xml2) #To handle XML files
+library(dplyr)
+library(jsonlite) #To handle JSON files
+library(rvest)   # For parsing HTML tables
+```
+
+
+Define the URLs for  each file
+```{r, define source}
+html_url <- "https://raw.githubusercontent.com/Lfirenzeg/msds607labs/refs/heads/main/Assignment7/cool-books.html"
+xml_url <- "https://raw.githubusercontent.com/Lfirenzeg/msds607labs/refs/heads/main/Assignment7/cool-books.xml"
+json_url <- "https://raw.githubusercontent.com/Lfirenzeg/msds607labs/refs/heads/main/Assignment7/cool-books.json"
+```
+
+Now, the files need to be downloaded and handled correspondingly
+```{r, function to download and save different types of files}
+# Function to download and save a file
+download_and_save <- function(url, file_name) {
+  response <- GET(url)
+  
+  if (status_code(response) == 200) {
+    writeBin(content(response, "raw"), file_name)
+    message(paste(file_name, "downloaded successfully!"))
+  } else {
+    message(paste("Failed to download", file_name))
+  }
+}
+
+```
+
+Now we can easily download all 3 files
+```{r}
+download_and_save(html_url, "cool_books_html.html")
+download_and_save(xml_url, "cool_books_xml.xml")
+download_and_save(json_url, "cool_books_json.json")
+```
+
+With the files downloaded let's get into reading them, starting with the HTML file:
+Normally, an html file would only show up as a text like in a notepad. In order to make easier sense of the content we use the rvest library 
+
+```{r, read HTML file}
+html_content <- read_html("cool_books_html.html")  # Reads the HTML file
+cool_books_html_table <- html_content %>%
+  html_table(fill = TRUE)  # Extracts the table thanks to rvest
+
+# Since `html_table()` returns a list of tables, select the first one
+cool_books_html_table <- cool_books_html_table[[1]]
+
+# Display the table
+print(cool_books_html_table)
+```
+
+
+Followed by the Json file:
+
+First we get the original structure from the file that would initally resemble the text from a notepad and is initially saved as a list:
+```{r, read JSON file}
+cool_books_json <- fromJSON("cool_books_json.json")
+
+# Display the JSON content
+print(cool_books_json)
+```
+
+Once that's done, the list needs to be adjusted to the format of a table:
+```{r json table}
+books_data <- cool_books_json$books
+
+cool_books_json_table <- data.frame(
+  Title = books_data$title,
+  Author = sapply(books_data$author, paste, collapse = ", "), 
+  Attributes = sapply(books_data$attributes, paste, collapse = ", ")
+)
+
+print(cool_books_json_table)
+```
+
+
+And finally the XML file:
+
+```{r get xml data}
+cool_books_xml <- read_xml("cool_books_xml.xml")
+
+# Display the XML structure
+print(cool_books_xml)
+```
+
+Just like the other 2 files, the xml will initially be stored as a list that is not easy to visualize the information. To fix that the XML2 package is also used to extract the information and convert it to a readabe data frame.
+
+```{r, organize xml data into table}
+# Extract book nodes
+book_nodes <- xml_find_all(cool_books_xml, "//book")
+
+# It might take longer initially, but writing a function to extract information from each book node will help with organizing it
+extract_book_info <- function(book_node) {
+  title <- xml_text(xml_find_first(book_node, "./title"))
+  
+# Check if the book has a single author node or multiple authors in an 'authors' node
+  author_nodes <- xml_find_all(book_node, "./author | ./authors/author")
+  
+  # Extract the text from the author nodes and combine them into a single string
+  if (length(author_nodes) > 0) {
+    authors <- paste(xml_text(author_nodes), collapse = ", ")
+  } else {
+    authors <- NA  # If no authors are found, return NA
+  }
+  
+  # Extract all attributes (in case there are multiple attributes)
+  attribute_nodes <- xml_find_all(book_node, "./attributes/attribute")
+  attributes <- paste(xml_text(attribute_nodes), collapse = ", ")
+  
+  # Return a named list with the extracted data
+  list(
+    Title = title,
+    Author = authors,
+    Attributes = attributes
+  )
+}
+
+# Apply the extraction function to each book node
+books_info <- lapply(book_nodes, extract_book_info)
+
+# Convert the list of books into a data frame
+cool_books_xml_table <- bind_rows(books_info)
+
+# View the final table
+print(cool_books_xml_table)
+```
+
+## Conclusion
+When handling different types of file that has the same information, different methods need to be followed, even if the final organized information will look the same.
+
+For example, the html file is originally loaded just as it would look like a note editor, but that's easily handled with the appropriate R library.
+
+On the other hand, the JSON and XML file were loaded originally as lists that were "hard to read" for a human specially because you need to open each node and it's to loose a sense for what the structure looks like. That mean that they needed a little bit more handling before the final tables could be created.
