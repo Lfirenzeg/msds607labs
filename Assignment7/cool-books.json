@@ -11,9 +11,9 @@
       "attributes": ["Thriller", "Symbology", "History"]
     },
     {
-      "title": "Harry Potter & the Goblet of Fire",
-      "author": "JK Rowling",
-      "attributes": ["Universe building", "Magic", "Tournament"]
+      "title": "Neuropsychology of Everyday Functioning",
+      "author": ["Thomas D. Marcotte", "Maureen Schmitter-Edgecombe", "Igor Grant"],
+      "attributes": ["Neuropathology", "Neuropsychological Tests", "Assessments"]
     }
   ]
 }
