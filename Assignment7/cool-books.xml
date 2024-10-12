@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<coolbooks>
+  <book>
+    <title>The Lord of the Rings</title>
+    <author>JRR Tolkien</author>
+    <attributes>
+      <attribute>Universe building</attribute>
+      <attribute>Epic fantasy</attribute>
+      <attribute>Journey</attribute>
+    </attributes>
+  </book>
+  
+  <book>
+    <title>Angels &amp; Demons</title>
+    <author>Dan Brown</author>
+    <attributes>
+      <attribute>Thriller</attribute>
+      <attribute>Symbology</attribute>
+      <attribute>History</attribute>
+    </attributes>
+  </book>
+  
+  <book>
+    <title>Harry Potter &amp; the Goblet of Fire</title>
+    <author>JK Rowling</author>
+    <attributes>
+      <attribute>Universe building</attribute>
+      <attribute>Magic</attribute>
+      <attribute>Tournament</attribute>
+    </attributes>
+  </book>
+</coolbooks>

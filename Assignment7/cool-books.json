@@ -1,0 +1,19 @@
+{
+  "books": [
+    {
+      "title": "The Lord of the Rings",
+      "author": "JRR Tolkien",
+      "attributes": ["Universe building", "Epic fantasy", "Journey"]
+    },
+    {
+      "title": "Angels & Demons",
+      "author": "Dan Brown",
+      "attributes": ["Thriller", "Symbology", "History"]
+    },
+    {
+      "title": "Harry Potter & the Goblet of Fire",
+      "author": "JK Rowling",
+      "attributes": ["Universe building", "Magic", "Tournament"]
+    }
+  ]
+}
