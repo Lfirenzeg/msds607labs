@@ -1,0 +1,103 @@
+---
+title: "Project 3 - Job Posts skills"
+author: "   "
+date: "2024-10-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Tyding Skills from Job Posts
+
+Once we have a .csv file containing the list of skills for each job post we can proceed to organize the information pulled with Pythong a bit more.
+
+Load the needed libraries
+
+```{r load-packages, message=FALSE}
+library(readr)
+library(dplyr)
+library(tidyr)
+library (stringr)
+```
+
+And load the data, which in this case is hosted in GitHub
+
+```{r, get data from GitHub}
+skills_url <- "https://raw.githubusercontent.com/Lfirenzeg/msds607labs/refs/heads/main/Project3/skills.csv"  
+companies_skills_url <- "https://raw.githubusercontent.com/Lfirenzeg/msds607labs/refs/heads/main/Project3/companies_skills.csv"
+
+# Load the CSV files into R data frames
+skills_df <- read.csv(skills_url, stringsAsFactors = FALSE)
+companies_skills_df <- read.csv(companies_skills_url, header = FALSE, stringsAsFactors = FALSE)
+
+# Display the first few rows of each table to confirm data was loaded succesfully 
+head(skills_df)
+head(companies_skills_df)
+```
+
+Next, we'll assign headers to the companies_skills_df table and remove some columns that are not necessary for the analysis, such as URL and Timestamp
+
+```{r, assign headers and remove 2 columns}
+# To assign column names to the companies_skills_df table
+colnames(companies_skills_df) <- c("URL", "Timestamp", "Skills", "Position", "Company", "Industry")
+
+# And then remove the "URL" and "Timestamp" columns using dplyr's select function
+companies_skills_df <- companies_skills_df %>%
+  select(-URL, -Timestamp)
+
+```
+
+To organize the data a bit more, we'll be separating the companies_skills_df table into two separate tables—one focused on company information and the other on skills
+```{r, splitting a table}
+# Reordering the columns using dplyr's select function
+companies_skills_df <- companies_skills_df %>%
+  select(Position, Skills, Company, Industry)
+
+# Table 1: Skills Job Post (without Industry)
+skills_job_post <- companies_skills_df %>%
+  select(Position, Skills, Company)
+
+# Table 2: Company and Industry Table
+company_industry_table <- companies_skills_df %>%
+  select(Company, Industry) %>%
+  distinct()  # using distinct to ensure there's no duplicated company-industry rows
+
+# Saving the new tables to CSV files
+write.csv(skills_job_post, "skills_table.csv", row.names = FALSE)
+write.csv(company_industry_table, "company_industry_table.csv", row.names = FALSE)
+```
+
+Now let's add the additional information to skills_job_post, such as how many skills are listed in total for each job post.
+
+```{r, add column total skill count}
+skills_job_post <- skills_job_post %>% 
+  mutate(Total_Skills = str_count(Skills, ",") + 1)  # Counting commas and adding 1 to get the total count
+```
+
+And also include additional columns for each type of skill. To do this the idea is to use the skills_df table that has all the original skills classified by type. A function will be used for this extracting the information from skills_df.
+
+```{r, total skills by type}
+# Create a new column to replace the skills with categories
+skills_job_post <- skills_job_post %>%
+  rowwise() %>%
+  mutate(skills_replaced_by_category = str_replace_all(Skills, setNames(skills_df$category, skills_df$skill)))
+
+# Now split the 'skills_replaced_by_category' by commas to get individual categories
+skills_job_post <- skills_job_post %>%
+  mutate(
+    Programming_Languages = str_count(skills_replaced_by_category, "Programming Languages"),
+    Technical_Skills = str_count(skills_replaced_by_category, "Technical Skills"),
+    Business_Skills = str_count(skills_replaced_by_category, "Business Skills"),
+    Soft_Skills = str_count(skills_replaced_by_category, "Soft Skills")
+  )
+
+# Remove the temporary column (optional)
+skills_job_post <- skills_job_post %>%
+  select(-skills_replaced_by_category)
+
+# View the updated dataframe
+head(skills_job_post)
+```
+
