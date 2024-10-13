@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Tyding Skills from Job Posts
 
-Once we have a .csv file containing the list of skills for each job post we can proceed to organize the information pulled with Pythong a bit more.
+Once we have a .csv file containing the list of skills for each job post we can proceed to organize the information pulled with Python a bit more.
 
 Load the needed libraries
 
