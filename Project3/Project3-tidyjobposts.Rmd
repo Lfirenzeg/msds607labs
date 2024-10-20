@@ -1,6 +1,6 @@
 ---
 title: "Project 3 - Job Posts skills"
-author: "   "
+author: "Daniel Brusche, Tiffany Hugh, Luis Munoz Grass"
 date: "2024-10-11"
 output: html_document
 ---
@@ -11,7 +11,14 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Tyding Skills from Job Posts
 
-Once we have a .csv file containing the list of skills for each job post we can proceed to organize the information pulled with Python a bit more.
+### Research Question:
+**What specific skills are essential for various data science positions across different industries?**
+
+After reviewing different articles to better understand how skills in Data Science can be classified into different categories, we'll compare how that is applied in skills found in job posts.  
+
+We used a Python program to scrap data from different job posts URLs (please see program in Github:"https://raw.githubusercontent.com/Lfirenzeg/msds607labs/refs/heads/main/Project3/Skill_Search.py"), and stored every entry in a .csv file.
+
+Once we have a .csv file containing the list of skills for each job post we can proceed to organize the information a bit more.
 
 Load the needed libraries
 
@@ -20,6 +27,7 @@ library(readr)
 library(dplyr)
 library(tidyr)
 library (stringr)
+library (ggplot2)
 ```
 
 And load the data, which in this case is hosted in GitHub
@@ -37,7 +45,13 @@ head(skills_df)
 head(companies_skills_df)
 ```
 
-Next, we'll assign headers to the companies_skills_df table and remove some columns that are not necessary for the analysis, such as URL and Timestamp
+We can see that we have 2 initial data sets:
+
+**skills_df**: Which works as a sort of dictionary for skills and what category it belongs to.
+
+**companies_skills_df**: Wich is the result of the data scrapped and stored in a .csv, with the columns: url, timestamp, skills, position, company and industry. However, it currently has no headers.
+
+We'll assign headers to the companies_skills_df table and remove some columns that are not necessary for the analysis, such as URL and Timestamp
 
 ```{r, assign headers and remove 2 columns}
 # To assign column names to the companies_skills_df table
@@ -49,7 +63,23 @@ companies_skills_df <- companies_skills_df %>%
 
 ```
 
-To organize the data a bit more, we'll be separating the companies_skills_df table into two separate tables—one focused on company information and the other on skills
+In order to facilitate the comparison with the other Data set of this project (skills in data science according to articles) we'll use 3 categories instead of 4 for the skills. In this case we'll merge Business Skills with Soft Skills. 
+
+```{r, merge business and soft skills}
+# Replace "Business Skills" with "Soft Skills" in the skills_df
+skills_df <- skills_df %>%
+  mutate(category = ifelse(category == "Business Skills", "Soft Skills", category))
+
+# Check the updated table
+head(skills_df)
+```
+
+To organize the data a bit more, we'll be separating the companies_skills_df table into two separate tables: 
+
+**company_industry_table**: Focused on storing name of company and the industry it belongs to. 
+
+**skills_job_post**: Focused on storing main information we'll be working with: Position, skills and company.
+
 ```{r, splitting a table}
 # Reordering the columns using dplyr's select function
 companies_skills_df <- companies_skills_df %>%
@@ -64,40 +94,536 @@ company_industry_table <- companies_skills_df %>%
   select(Company, Industry) %>%
   distinct()  # using distinct to ensure there's no duplicated company-industry rows
 
-# Saving the new tables to CSV files
-write.csv(skills_job_post, "skills_table.csv", row.names = FALSE)
-write.csv(company_industry_table, "company_industry_table.csv", row.names = FALSE)
 ```
 
-Now let's add the additional information to skills_job_post, such as how many skills are listed in total for each job post.
+Since our current list of skills in the table for job posts does not distinguish by category we'll split the column skills into 3, according to category of skill to facilitate analysis:
 
-```{r, add column total skill count}
-skills_job_post <- skills_job_post %>% 
-  mutate(Total_Skills = str_count(Skills, ",") + 1)  # Counting commas and adding 1 to get the total count
-```
+```{r, split skills list into 3 new columns}
+#First, we make a copy of the "Skills" column to a new column called "Technical Skills"
+skills_job_post <- skills_job_post %>%
+  mutate(Technical_Skills = Skills)
 
-And also include additional columns for each type of skill. To do this the idea is to use the skills_df table that has all the original skills classified by type. A function will be used for this extracting the information from skills_df.
+#Then we create a list of all Technical Skills from skills_df to have something to compare
+technical_skills_full_list <- skills_df %>%
+  filter(category == "Technical Skills") %>%
+  pull(skill)
 
-```{r, total skills by type}
-# Create a new column to replace the skills with categories
+#Comparing the new column and the new list, we filter only the Technical Skills in the "Technical_Skills" column
+# We will keep only the skills that are present in both the job post skills and the technical skills list
 skills_job_post <- skills_job_post %>%
   rowwise() %>%
-  mutate(skills_replaced_by_category = str_replace_all(Skills, setNames(skills_df$category, skills_df$skill)))
+  mutate(Technical_Skills = paste(
+    intersect(strsplit(Technical_Skills, ",\\s*")[[1]], technical_skills_full_list),
+    collapse = ", "
+  ))
 
-# Now split the 'skills_replaced_by_category' by commas to get individual categories
+#Repeat process for Programming Languages
 skills_job_post <- skills_job_post %>%
-  mutate(
-    Programming_Languages = str_count(skills_replaced_by_category, "Programming Languages"),
-    Technical_Skills = str_count(skills_replaced_by_category, "Technical Skills"),
-    Business_Skills = str_count(skills_replaced_by_category, "Business Skills"),
-    Soft_Skills = str_count(skills_replaced_by_category, "Soft Skills")
-  )
+  mutate(Programming_Languages = Skills)
 
-# Remove the temporary column (optional)
+programming_skills_full_list <- skills_df %>%
+  filter(category == "Programming Languages") %>%
+  pull(skill)
+
 skills_job_post <- skills_job_post %>%
-  select(-skills_replaced_by_category)
+  rowwise() %>%
+  mutate(Programming_Languages = paste(
+    intersect(strsplit(Programming_Languages, ",\\s*")[[1]], programming_skills_full_list),
+    collapse = ", "
+  ))
 
-# View the updated dataframe
+# And repeat the process for Soft Skills
+skills_job_post <- skills_job_post %>%
+  mutate(Soft_Skills = Skills)
+
+soft_skills_full_list <- skills_df %>%
+  filter(category == "Soft Skills") %>%
+  pull(skill)
+
+skills_job_post <- skills_job_post %>%
+  rowwise() %>%
+  mutate(Soft_Skills = paste(
+    intersect(strsplit(Soft_Skills, ",\\s*")[[1]], soft_skills_full_list),
+    collapse = ", "
+  ))
+
+#Remove the original "Skills" column
+skills_job_post <- skills_job_post %>%
+  select(-Skills)
+
+#View updated table to check our progress
 head(skills_job_post)
 ```
 
+
+## Analysis by skill category
+
+Now that we have the skills_job_post table tidied to our liking, we can start creating smaller tables for summary data and analyse it. 
+
+We can start by creating a summary table for **Technical Skills**:
+
+```{r, summary table for technical skills}
+#Extract all technical skills from the "Technical_Skills" column, and split them into individual elements
+all_technical_skills <- skills_job_post %>%
+  pull(Technical_Skills) %>%
+  strsplit(",\\s*") %>%
+  unlist()
+
+#Create a summary table that counts the occurrences of each technical skill
+technical_skills_summary <- as.data.frame(table(all_technical_skills))
+
+#rename the columns for clarity
+colnames(technical_skills_summary) <- c("Name", "Count")
+
+#calculate the percentage of occurrences
+total_posts <- 50  # Assuming there are 50 job posts
+technical_skills_summary <- technical_skills_summary %>%
+  mutate(Percentage = (Count / total_posts) * 100)
+
+#organize the table by Count, in descending order
+technical_skills_summary <- technical_skills_summary %>%
+  arrange(desc(Count))
+
+#visualize tables
+print(technical_skills_summary)
+```
+
+And if we want to visualize it using ggplot:
+
+```{r, plot for technical skills}
+top_10_tech_skills <- technical_skills_summary %>%
+  arrange(desc(Count)) %>%
+  head(10)
+
+# Generate the plot
+ggplot(top_10_tech_skills, aes(x = Count, y = reorder(Name, Count), fill = Count)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "lightblue", high = "blue") +
+  geom_text(aes(label = paste0(round(Percentage, 1), "%")), 
+            position = position_stack(vjust = 0.4), hjust = -0.1, color = "white", size = 4) + 
+  labs(
+    title = "Top 10 Most Common Technical Skills",
+    x = "Count of Occurrences",
+    y = "Skills"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 12),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    plot.title = element_text(hjust = 0.5, size = 16)
+  )
+
+```
+What does this tell us?
+
+- Machine Learning emerges as the most valued skill, appearing in 100% of job postings (50 counts). Other significant skills include Excel (78%), Data Mining (72%), and Data Analysis (58%). This indicates that proficiency in traditional data manipulation and analysis tools remains vital for anyone planning to be in a data science role.
+
+- Deep Learning and Git also make the list, highlighting the relevance of newer technologies and version control in the data science field. This is significant as it shows a trend towards more complex modeling techniques and the importance of collaboration in projects.
+
+
+Now what do we find for **Programming Languages**?
+
+```{r, summary table for programming languages}
+#Extract all programming languages from the "Programming Languages" column, and split them into individual elements
+all_programming_skills <- skills_job_post %>%
+  pull(Programming_Languages) %>%
+  strsplit(",\\s*") %>%
+  unlist()
+
+#Create a summary table that counts the occurrences of each technical skill
+programming_languages_summary <- as.data.frame(table(all_programming_skills))
+
+#rename the columns for clarity
+colnames(programming_languages_summary) <- c("Name", "Count")
+
+#calculate the percentage of occurrences
+total_posts <- 50  # Assuming there are 50 job posts
+programming_languages_summary <- programming_languages_summary %>%
+  mutate(Percentage = (Count / total_posts) * 100)
+
+#organize the table by Count, in descending order
+programming_languages_summary <- programming_languages_summary %>%
+  arrange(desc(Count))
+
+#visualize tables
+print(programming_languages_summary)
+```
+
+And the visual for programming languages:
+
+```{r, plot for programming languages}
+
+top_10_prog_skills <- programming_languages_summary %>%
+  arrange(desc(Count)) %>%
+  head(10)
+
+# Generate the plot
+ggplot(top_10_prog_skills, aes(x = Count, y = reorder(Name, Count), fill = Count)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "red", high ="darkred") +
+  geom_text(aes(label = paste0(round(Percentage, 1), "%")), 
+            position = position_stack(vjust = 0.4), hjust = -0.1, color = "white", size = 4) +
+  labs(
+    title = "Top 10 Most Common Programming Languages",
+    x = "Count of Occurrences",
+    y = "Skills"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 12),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    plot.title = element_text(hjust = 0.5, size = 16)
+  )
+```
+
+- Python and SQL are the most sought-after programming languages, each appearing in 92% of job postings. The high count for these 2 languages aligns with current industry trends, suggesting that job seekers should prioritize learning these languages to remain competitive in the job market.
+
+- R appears in 56% of job postings, highlighting its relevance, particularly in statistical analysis and data visualization. While not as dominant as Python and SQL, it remains an important language for data scientists, especially those in academic or research-focused roles.
+
+Finally, let's take a look at **Soft Skills**:
+
+```{r, summary table for soft skills}
+#Extract all softs skills from the "Soft Skills" column, and split them into individual elements
+all_soft_skills <- skills_job_post %>%
+  pull(Soft_Skills) %>%
+  strsplit(",\\s*") %>%
+  unlist()
+
+#Create a summary table that counts the occurrences of each technical skill
+soft_skills_summary <- as.data.frame(table(all_soft_skills))
+
+#rename the columns for clarity
+colnames(soft_skills_summary) <- c("Name", "Count")
+
+#calculate the percentage of occurrences
+total_posts <- 50  # Assuming there are 50 job posts
+soft_skills_summary <- soft_skills_summary %>%
+  mutate(Percentage = (Count / total_posts) * 100)
+
+#organize the table by Count, in descending order
+soft_skills_summary <- soft_skills_summary %>%
+  arrange(desc(Count))
+
+#visualize tables
+print(soft_skills_summary)
+```
+
+And the plot for soft skills:
+
+```{r, plot for soft skills}
+
+top_10_soft_skills <- soft_skills_summary %>%
+  arrange(desc(Count)) %>%
+  head(10)
+
+# Generate the plot
+ggplot(top_10_soft_skills, aes(x = Count, y = reorder(Name, Count), fill = Count)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "lightgreen", high ="darkgreen") +
+  geom_text(aes(label = paste0(round(Percentage, 1), "%")), 
+            position = position_stack(vjust = 0.4), hjust = -0.1, color = "white", size = 4) + # Add percentage inside bars
+  labs(
+    title = "Top 10 Most Common Soft Skills",
+    x = "Count of Occurrences",
+    y = "Skills"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 12),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    plot.title = element_text(hjust = 0.5, size = 16)
+  )
+```
+
+- As we can see in the plot, leadership is the most frequently mentioned soft skill, appearing in 76% of job postings. This could indicate that employers value leadership abilities in potential candidates, reflecting the need for individuals who can guide teams and projects effectively. 
+
+- Communication skills are essential, as they appear in 60% of job postings. It's also interesting to see critical thinking (52%) and collaboration (48%), as this shows an interest in candidates that can both be team players but also analyze situations thoughtfully and develop solution more independently when needed.
+
+
+## Analysis of 2 Industries
+
+Our previous findings are based on the data for all job posts. But what if we wanted to apply a similar analysis only to  job posts from companies in certain industries such as Technology and Healthcare.
+
+Let's focus on the **Tech Industry** first:
+
+```{r}
+# Merge the skills_job_post table with company_industry_table to add the Industry column
+skills_job_post_with_industry <- merge(skills_job_post, company_industry_table, by = "Company")
+
+# Filter for Technology industry
+skills_technology <- skills_job_post_with_industry %>%
+  filter(Industry == "Tech")
+
+# Extract all technical skills from the "Technical_Skills" column for the Technology industry
+all_technical_skills_technology <- skills_technology %>%
+  pull(Technical_Skills) %>%
+  strsplit(",\\s*") %>%
+  unlist()
+
+# Create a summary table that counts the occurrences of each technical skill in the Technology industry
+technical_skills_summary_technology <- as.data.frame(table(all_technical_skills_technology))
+
+# Rename the columns for clarity
+colnames(technical_skills_summary_technology) <- c("Name", "Count")
+
+# Calculate the percentage of occurrences for technical skills in Technology industry
+total_technology_posts <- nrow(skills_technology)  # Total number of job posts in Technology industry
+technical_skills_summary_technology <- technical_skills_summary_technology %>%
+  mutate(Percentage = (Count / total_technology_posts) * 100) %>%
+  arrange(desc(Count))
+
+# Extract all programming languages from the "Programming_Languages" column for Technology industry
+all_programming_skills_technology <- skills_technology %>%
+  pull(Programming_Languages) %>%
+  strsplit(",\\s*") %>%
+  unlist()
+
+# Create a summary table for programming languages in Technology
+programming_languages_summary_technology <- as.data.frame(table(all_programming_skills_technology))
+
+# Rename columns and calculate percentages for programming languages in Technology industry
+colnames(programming_languages_summary_technology) <- c("Name", "Count")
+programming_languages_summary_technology <- programming_languages_summary_technology %>%
+  mutate(Percentage = (Count / total_technology_posts) * 100) %>%
+  arrange(desc(Count))
+
+# Extract all soft skills from the "Soft_Skills" column for Technology industry
+all_soft_skills_technology <- skills_technology %>%
+  pull(Soft_Skills) %>%
+  strsplit(",\\s*") %>%
+  unlist()
+
+# Create a summary table for soft skills in Technology
+soft_skills_summary_technology <- as.data.frame(table(all_soft_skills_technology))
+
+# Rename columns and calculate percentages for soft skills in Technology industry
+colnames(soft_skills_summary_technology) <- c("Name", "Count")
+soft_skills_summary_technology <- soft_skills_summary_technology %>%
+  mutate(Percentage = (Count / total_technology_posts) * 100) %>%
+  arrange(desc(Count))
+
+# Select the top 10 most common technical skills in Technology
+top_10_tech_skills_technology <- technical_skills_summary_technology %>%
+  arrange(desc(Count)) %>%
+  head(10)
+
+# Select the top 10 most common programming languages in Technology
+top_10_programming_languages_technology <- programming_languages_summary_technology %>%
+  arrange(desc(Count)) %>%
+  head(10)
+
+# Select the top 10 most common soft skills in Technology
+top_10_soft_skills_technology <- soft_skills_summary_technology %>%
+  arrange(desc(Count)) %>%
+  head(10)
+
+# Generate the plots for Technology industry
+ggplot(top_10_tech_skills_technology, aes(x = Count, y = reorder(Name, Count), fill = Count)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "lightblue", high = "blue") +
+  geom_text(aes(label = paste0(round(Percentage, 1), "%")), 
+            position = position_stack(vjust = 0.4), hjust = -0.1, color = "white", size = 4) + 
+  labs(
+    title = "Most Common Technical Skills in Technology Industry",
+    x = "Count of Occurrences",
+    y = "Skills"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 12),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    plot.title = element_text(hjust = 0.5, size = 16)
+  )
+
+ggplot(top_10_programming_languages_technology, aes(x = Count, y = reorder(Name, Count), fill = Count)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "red", high = "darkred") +
+  geom_text(aes(label = paste0(round(Percentage, 1), "%")), 
+            position = position_stack(vjust = 0.4), hjust = -0.1, color = "white", size = 4) + 
+  labs(
+    title = "Most Common Programming Languages in Technology Industry",
+    x = "Count of Occurrences",
+    y = "Skills"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 12),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    plot.title = element_text(hjust = 0.5, size = 16)
+  )
+
+ggplot(top_10_soft_skills_technology, aes(x = Count, y = reorder(Name, Count), fill = Count)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "lightgreen", high = "darkgreen") +
+  geom_text(aes(label = paste0(round(Percentage, 1), "%")), 
+            position = position_stack(vjust = 0.4), hjust = -0.1, color = "white", size = 4) + 
+  labs(
+    title = "Most Common Soft Skills in Technology Industry",
+    x = "Count of Occurrences",
+    y = "Skills"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 12),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    plot.title = element_text(hjust = 0.5, size = 16)
+  )
+```
+
+
+And let's see the **Healthcare Industry**:
+
+```{r, analysis healthcare}
+# Merge the skills_job_post table with company_industry_table to add the Industry column
+skills_job_post_with_industry <- merge(skills_job_post, company_industry_table, by = "Company")
+
+# Filter for a specific industry, for example, "Healthcare"
+skills_healthcare <- skills_job_post_with_industry %>%
+  filter(Industry == "Healthcare")
+
+# Extract all technical skills from the "Technical_Skills" column for the Healthcare industry
+all_technical_skills_healthcare <- skills_healthcare %>%
+  pull(Technical_Skills) %>%
+  strsplit(",\\s*") %>%
+  unlist()
+
+# Create a summary table that counts the occurrences of each technical skill in the Healthcare industry
+technical_skills_summary_healthcare <- as.data.frame(table(all_technical_skills_healthcare))
+
+# Rename the columns for clarity
+colnames(technical_skills_summary_healthcare) <- c("Name", "Count")
+
+# Calculate the percentage of occurrences
+total_healthcare_posts <- nrow(skills_healthcare)  # Total number of job posts in Healthcare industry
+technical_skills_summary_healthcare <- technical_skills_summary_healthcare %>%
+  mutate(Percentage = (Count / total_healthcare_posts) * 100)
+
+# Organize the table by Count, in descending order
+technical_skills_summary_healthcare <- technical_skills_summary_healthcare %>%
+  arrange(desc(Count))
+
+# Extract all programming languages from the "Programming_Languages" column for Healthcare industry
+all_programming_skills_healthcare <- skills_healthcare %>%
+  pull(Programming_Languages) %>%
+  strsplit(",\\s*") %>%
+  unlist()
+
+# Create a summary table for programming languages in Healthcare
+programming_languages_summary_healthcare <- as.data.frame(table(all_programming_skills_healthcare))
+
+# Rename columns and calculate percentages
+colnames(programming_languages_summary_healthcare) <- c("Name", "Count")
+programming_languages_summary_healthcare <- programming_languages_summary_healthcare %>%
+  mutate(Percentage = (Count / total_healthcare_posts) * 100) %>%
+  arrange(desc(Count))
+
+# Extract all programming languages from the "Programming_Languages" column for Healthcare industry
+all_soft_skills_healthcare <- skills_healthcare %>%
+  pull(Soft_Skills) %>%
+  strsplit(",\\s*") %>%
+  unlist()
+
+# Create a summary table for programming languages in Healthcare
+soft_skills_summary_healthcare <- as.data.frame(table(all_soft_skills_healthcare))
+
+# Rename columns and calculate percentages
+colnames(soft_skills_summary_healthcare) <- c("Name", "Count")
+soft_skills_summary_healthcare <- soft_skills_summary_healthcare %>%
+  mutate(Percentage = (Count / total_healthcare_posts) * 100) %>%
+  arrange(desc(Count))
+
+# Select the top 10 most common technical skills in Healthcare
+top_10_tech_skills_healthcare <- technical_skills_summary_healthcare %>%
+  arrange(desc(Count)) %>%
+  head(10)
+
+# Select the top 10 most common programming languages in Healthcare
+top_10_programming_languages_healthcare <- programming_languages_summary_healthcare %>%
+  arrange(desc(Count)) %>%
+  head(10)
+
+# Select the top 10 most common soft skills in Healthcare
+top_10_soft_skills_healthcare <- soft_skills_summary_healthcare %>%
+  arrange(desc(Count)) %>%
+  head(10)
+
+# Generate the plots for Healthcare industry
+ggplot(top_10_tech_skills_healthcare, aes(x = Count, y = reorder(Name, Count), fill = Count)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "lightblue", high = "blue") +
+  geom_text(aes(label = paste0(round(Percentage, 1), "%")), 
+            position = position_stack(vjust = 0.4), hjust = -0.1, color = "white", size = 4) + 
+  labs(
+    title = "Most Common Technical Skills in Healthcare Industry",
+    x = "Count of Occurrences",
+    y = "Skills"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 12),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    plot.title = element_text(hjust = 0.5, size = 16)
+  )
+
+ggplot(top_10_programming_languages_healthcare, aes(x = Count, y = reorder(Name, Count), fill = Count)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "red", high = "darkred") +
+  geom_text(aes(label = paste0(round(Percentage, 1), "%")), 
+            position = position_stack(vjust = 0.4), hjust = -0.1, color = "white", size = 4) + 
+  labs(
+    title = "Most Common Programming Languages in Healthcare Industry",
+    x = "Count of Occurrences",
+    y = "Skills"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 12),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    plot.title = element_text(hjust = 0.5, size = 16)
+  )
+
+ggplot(top_10_soft_skills_healthcare, aes(x = Count, y = reorder(Name, Count), fill = Count)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "lightgreen", high = "darkgreen") +
+  geom_text(aes(label = paste0(round(Percentage, 1), "%")), 
+            position = position_stack(vjust = 0.4), hjust = -0.1, color = "white", size = 4) + 
+  labs(
+    title = "Most Common Soft Skills in Healthcare Industry",
+    x = "Count of Occurrences",
+    y = "Skills"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 12),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    plot.title = element_text(hjust = 0.5, size = 16)
+  )
+```
+
+
+### Findings
+
+**Technology skills**:
+- Machine Learning is highly sought after, appearing in 100% of the job posts for both industries. Other common skills include Data Analysis, Excel, Data Mining, and Data Visualization, all appearing in over 50% of the job posts.
+The focus seems to be on both core analytical skills and the tools required to manage large data sets, with Artificial Intelligence, Git, and Deep Learning also being significant. However, skills like Data Modeling, Statistical Analysis, and Deep Learning have a higher relative importance, with Classification also showing up, indicating that more specific modeling techniques are valued in healthcare. Big Data is more prominent here, suggesting that handling massive healthcare datasets is critical in this sector.
+
+**Programming Languages**:
+- Python and SQL dominate this sector, appearing in almost all job posts. R appears in just over half of the job posts. This shows the strong demand for versatile languages like Python and SQL, with TensorFlow and MATLAB being tools needed for machine learning tasks. Meanwhile, in the healthcare, SQL is required in 100% of posts in this industry, likely due to the need to manage large databases in healthcare. Python is almost equally important, but R appears more frequently in healthcare than in technology, which may reflect its statistical capabilities.
+
+**Soft Skills**:
+- Critical Thinking emerges as the most important soft skill, appearing in over 66% of job posts. Leadership and Project Management are also highly valued, emphasizing the need for strong team management and project execution. In healthcare, soft skills like Project Management, Leadership, and Innovation appear in 80% of job postings, showing a need for individuals who can manage healthcare projects and lead teams effectively. Interestingly, Critical Thinking appears less frequently (60%) in healthcare compared to technology, but Business Intelligence is equally important, suggesting a need for those who can understand both the medical and business sides of healthcare.
+
+### Conclusions
+
+- Overall both industries emphasize Machine Learning, but healthcare places a greater emphasis on data modeling, classification, and handling large healthcare datasets. Tools like Git and more specialized machine learning techniques seem more relevant to the technology sector.
+- SQL is the dominant language in healthcare, but Python is essential across both industries. Healthcare shows a higher demand for R due to its statistical capabilities.
+- Leadership and project management are highly valued across both industries, but healthcare emphasizes communication, collaboration, and innovation slightly more than technology.
