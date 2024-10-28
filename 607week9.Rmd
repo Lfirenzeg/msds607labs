@@ -1,0 +1,135 @@
+---
+title: "607- Web APIs"
+author: "Luis Munoz Grass"
+date: "2024-10-28"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+## Web APIs
+
+For this assignment I chose to focus on popular articles on NYTimes.com, specifically the most viewed articles for the last seven days.
+
+To construct an interface in R to read in the JSON data, and transform it into an R DataFrame first we need the httr package to handle the API request and jsonlite for parsing JSON data.
+
+```{r Load Required Libraries}
+library(httr)
+library(jsonlite)
+library(dplyr)
+library(tidyr)
+```
+
+Now we'll use define our API key and the API endpoint for fetching the most viewed articles.
+
+```{r Define APU key}
+api_key <- "RR1pKS3dTgAgn7DrYAkkYAl0XuG41xGG"
+endpoint <- "https://api.nytimes.com/svc/mostpopular/v2/viewed/7.json"
+```
+
+Next, we'll use the GET function to make the request, including our API key as a query parameter.
+
+```{r Make API request}
+response <- GET(endpoint, query = list("api-key" = api_key))
+```
+
+Let's ensure that the API request was successful by checking the status code.
+```{r check connection}
+if (status_code(response) == 200) {
+  print("Request successful!")
+} else {
+  stop("Request failed!")
+}
+``` 
+
+Since we got a successful request let's move on to parse the JSON content.
+```{r parse JSON}
+content <- content(response, "text")
+data_list <- fromJSON(content, flatten = TRUE)
+```
+
+However, we can use the environment to see that we have a structure difficult to navigate, so we can use a simple transformation from the current JSON format into a table.
+
+```{r arrange articles}
+articles_df <- as.data.frame(data_list$results)
+```
+
+And finally we can start reviewing the data
+```{r view data }
+head(articles_df)
+```
+
+There's a lot of information so let's start looking into what some of the columns can tell us.
+
+## Top Sections and Subsections
+
+Now that we have a nicely organized (although quite wide) table we can count articles by section and subsection to show the distribution across different parts of the newspaper.
+
+```{r top sections}
+top_sections <- articles_df %>%
+  group_by(section, subsection) %>%
+  summarise(article_count = n()) %>%
+  arrange(desc(article_count))
+
+top_sections
+```
+
+- It seems **Opinion** and **U.S. Politics** sections have the most viewed articles, suggesting that readers are currently very engaged with opinion pieces and political news, which makes with the Presidential Elections just a couple of days away. 
+- The **Business** section, especially in the Media subsection, also has significant readership. This could indicate interest in news about the media industry itself, possibly related to current events, corporate news, or media personalities.
+
+## Trends in Publication and Update Frequency
+
+We can also calculate the difference between published_date and updated to see how often articles are updated.
+
+```{r Trends publication}
+articles_df <- articles_df %>%
+  mutate(
+    published_date = as.Date(published_date),
+    updated = as.Date(updated),
+    update_gap = as.numeric(difftime(updated, published_date, units = "days"))
+  )
+
+# Summarize the average update gap by section
+update_trends <- articles_df %>%
+  group_by(section) %>%
+  summarise(average_update_gap = mean(update_gap, na.rm = TRUE)) %>%
+  arrange(desc(average_update_gap))
+
+update_trends
+```
+We can observe a few interesting patterns regarding how frequently articles in different sections are updated:
+
+- Articles in the **Arts** and **World** sections have the longest average update gap of 2 days, while **Opinion** articles average around 1.8 days. These sections seem to have more extended content, which may be updated  over a few days to stay relevant. For Opinion it makes more sense, since this could be due to changing viewpoints or reactions to public feedback.
+
+- The **U.S.** section has a moderate average update gap of 1.33 days, which may reflect the fast-moving nature of domestic news. Regular updates in this section likely align with breaking news or rapid developments in U.S. politics and other domestic issues
+
+- Finally, with an average update gap of 1 day, **Business, Food, Science, and Technology** tend to update once (or not at all), suggesting that the content in these areas may be more stable or factual, needing fewer real-time changes. Business and Technology might require fewer updates once reported, while Food and Science may primarily cover feature-style content that remains relevant for a longer period.
+
+## Keyword and Topic Analysis
+
+One final insight we can get is from analyzing the adx_keywords column for recurring keywords. Since adx_keywords may contain multiple keywords per article, we’ll split and tally them.
+
+```{r keywords}
+
+keyword_counts <- articles_df %>%
+  mutate(adx_keywords = strsplit(adx_keywords, ";")) %>%  # Split keywords by ';'
+  unnest(adx_keywords) %>%      # Unnest to create one row per keyword
+  filter(adx_keywords != "") %>%  # Remove empty keywords
+  group_by(adx_keywords) %>%
+  summarise(keyword_count = n()) %>%
+  arrange(desc(keyword_count))
+
+# View the top keywords
+keyword_counts
+```
+
+This might be my favorite insight, as we get more detailed information about what’s currently trending and engaging readers.
+
+- The top keywords, including "Presidential Election of 2024," "Trump, Donald J," and "United States Politics and Government," indicate significant public interest in the upcoming U.S. presidential election. Topics involving Kamala Harris and Donald Trump also appear frequently, reflecting the public attention on key political figures and the broader political landscape.
+
+- Topics like Gender, Homosexuality and Bisexuality, Children and Childhood, and Teenagers and Adolescence highlight ongoing reader engagement with social and cultural issues. These subjects may reflect societal debates around identity, childhood, and adolescence, possibly tied to larger discussions about policies or social changes.
+
+- Keywords like "News and News Media," "Endorsements," and specific references to news outlets (e.g., "Los Angeles Times") and figures (e.g., "Bezos, Jeffrey P") suggest that the media itself is a topic of interest. 
+
+Additionally, there’s interest in international issues (such as the Israel and Gaza conflict, Russia, and Ukraine), along with niche interests (Artificial Intelligence and Cyberwarfare), indicating a diverse range of topics that draw readership. This mixed bag of political, cultural, and international themes could mean that readers are engaged with both domestic and global developments, especially those with potential societal impact.
