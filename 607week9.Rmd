@@ -24,7 +24,7 @@ library(tidyr)
 Now we'll use define our API key and the API endpoint for fetching the most viewed articles.
 
 ```{r Define APU key}
-api_key <- "RR1pKS3dTgAgn7DrYAkkYAl0XuG41xGG"
+api_key <- "key goes here"
 endpoint <- "https://api.nytimes.com/svc/mostpopular/v2/viewed/7.json"
 ```
 
