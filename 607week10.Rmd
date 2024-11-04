@@ -1,0 +1,397 @@
+---
+title: "Assignment 10"
+author: "Luis Munoz Grass"
+date: "2024-11-01"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data Mining
+
+**Instructions**
+
+In Text Mining with R, Chapter 2 looks at Sentiment Analysis.  In this assignment, we'll start by getting the primary example code from chapter 2 working in an R Markdown document. Then, we'll work with a different corpus and incorporate at least one additional sentiment lexicon.
+
+### References
+
+- Hu, M., & Liu, B. (2004). Mining and Summarizing Customer Reviews. Proceedings of the Tenth ACM SIGKDD International Conference on Knowledge Discovery and Data Mining, 168-177.
+
+- Loughran, Tim, and Bill McDonald. "When is a Liability Not a Liability? Textual Analysis, Dictionaries, and 10-Ks." The Journal of Finance, vol. 66, no. 1, 2011, pp. 35-65.
+
+- Mohammad, S. M., & Turney, P. D. (2013). Crowdsourcing a Word-Emotion Association Lexicon. Computational Intelligence, 29(3), 436-465.
+
+- Nielsen, F. Å. (2011). A new ANEW: Evaluation of a word list for sentiment analysis in microblogs. Proceedings of the ESWC2011 Workshop on 'Making Sense of Microposts', 93-98.
+
+- Silge, J., & Robinson, D. (2017). Chapter 1 & 2. In Text Mining with R: A Tidy Approach. O'Reilly Media.
+
+## Primary Example Code
+
+### Text Mining with R (Chapter 1 & 2)
+
+The entire following section is code from the the book Text Mining with R. Which helps us understand the lexicons for sentiment analysis and how can the code be extended from there.
+
+Tidying the works of Jane Austen
+```{r}
+library(janeaustenr)
+library(dplyr)
+library(stringr)
+
+original_books <- austen_books() %>%
+  group_by(book) %>%
+  mutate(linenumber = row_number(),
+         chapter = cumsum(str_detect(text, 
+                                     regex("^chapter [\\divxlc]",
+                                           ignore_case = TRUE)))) %>%
+  ungroup()
+
+```
+
+Restructuring it in the one-token-per-row format.
+```{r}
+library(tidytext)
+tidy_books <- original_books %>%
+  unnest_tokens(word, text)
+```
+
+
+Remove stop words (kept in the tidytext dataset stop_words) with an anti_join().
+```{r}
+data(stop_words)
+
+tidy_books <- tidy_books %>%
+  anti_join(stop_words)
+```
+
+Couting the most common words in Jane Austen's books
+```{r}
+tidy_books %>%
+  count(word, sort = TRUE) 
+```
+
+Visualizing previous count
+```{r}
+library(ggplot2)
+
+tidy_books %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 600) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(y = NULL)
+```
+
+Adding on more books using Gutenbergr library 
+```{r}
+library(gutenbergr)
+
+hgwells <- gutenberg_download(c(35, 36, 5230, 159))
+
+tidy_hgwells <- hgwells %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words)
+
+tidy_hgwells %>%
+  count(word, sort = TRUE)
+```
+
+And more books
+```{r}
+bronte <- gutenberg_download(c(1260, 768, 969, 9182, 767))
+
+tidy_bronte <- bronte %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words)
+
+tidy_bronte %>%
+  count(word, sort = TRUE)
+```
+
+Calculating the frequency for each word for the works of Jane Austen, the Brontë sisters, and H.G. Wells by binding the data frames together.
+```{r}
+library(tidyr)
+
+frequency <- bind_rows(mutate(tidy_bronte, author = "Brontë Sisters"),
+                       mutate(tidy_hgwells, author = "H.G. Wells"), 
+                       mutate(tidy_books, author = "Jane Austen")) %>% 
+  mutate(word = str_extract(word, "[a-z']+")) %>%
+  count(author, word) %>%
+  group_by(author) %>%
+  mutate(proportion = n / sum(n)) %>% 
+  select(-n) %>% 
+  pivot_wider(names_from = author, values_from = proportion) %>%
+  pivot_longer(`Brontë Sisters`:`H.G. Wells`,
+               names_to = "author", values_to = "proportion")
+
+frequency
+```
+
+
+Quantify how similar and different these sets of word frequencies are using a correlation test
+```{r}
+cor.test(data = frequency[frequency$author == "Brontë Sisters",],
+         ~ proportion + `Jane Austen`)
+
+cor.test(data = frequency[frequency$author == "H.G. Wells",], 
+         ~ proportion + `Jane Austen`)
+
+```
+
+The function get_sentiments() allows us to get specific sentiment lexicons with the appropriate measures for each one.
+```{r}
+library(textdata)
+get_sentiments("afinn")
+get_sentiments("bing")
+get_sentiments("nrc")
+```
+
+
+"Let’s look at the words with a joy score from the NRC lexicon. What are the most common joy words in Emma? First, we need to take the text of the novels and convert the text to the tidy format using unnest_tokens(), just as we did in Section 1.3. Let’s also set up some other columns to keep track of which line and chapter of the book each word comes from; we use group_by and mutate to construct those columns."
+```{r}
+tidy_books <- austen_books() %>%
+  group_by(book) %>%
+  mutate(
+    linenumber = row_number(),
+    chapter = cumsum(str_detect(text, 
+                                regex("^chapter [\\divxlc]", 
+                                      ignore_case = TRUE)))) %>%
+  ungroup() %>%
+  unnest_tokens(word, text)
+```
+
+"Now that the text is in a tidy format with one word per row, we are ready to do the sentiment analysis. First, let’s use the NRC lexicon and filter() for the joy words. Next, let’s filter() the data frame with the text from the books for the words from Emma and then use inner_join() to perform the sentiment analysis. What are the most common joy words in Emma? Let’s use count() from dplyr."
+```{r}
+nrc_joy <- get_sentiments("nrc") %>% 
+  filter(sentiment == "joy")
+
+tidy_books %>%
+  filter(book == "Emma") %>%
+  inner_join(nrc_joy) %>%
+  count(word, sort = TRUE)
+```
+
+"We then use pivot_wider() so that we have negative and positive sentiment in separate columns, and lastly calculate a net sentiment (positive - negative)."
+"Now we can plot these sentiment scores across the plot trajectory of each novel."
+
+```{r}
+jane_austen_sentiment <- tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(book, index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+
+ggplot(jane_austen_sentiment, aes(index, sentiment, fill = book)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~book, ncol = 2, scales = "free_x")
+```
+
+Comparing the three sentiment dictionaries
+```{r}
+pride_prejudice <- tidy_books %>% 
+  filter(book == "Pride & Prejudice")
+
+afinn <- pride_prejudice %>% 
+  inner_join(get_sentiments("afinn")) %>% 
+  group_by(index = linenumber %/% 80) %>% 
+  summarise(sentiment = sum(value)) %>% 
+  mutate(method = "AFINN")
+
+bing_and_nrc <- bind_rows(
+  pride_prejudice %>% 
+    inner_join(get_sentiments("bing")) %>%
+    mutate(method = "Bing et al."),
+  pride_prejudice %>% 
+    inner_join(get_sentiments("nrc") %>% 
+                 filter(sentiment %in% c("positive", 
+                                         "negative"))
+    ) %>%
+    mutate(method = "NRC")) %>%
+  count(method, index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment,
+              values_from = n,
+              values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+
+bind_rows(afinn, 
+          bing_and_nrc) %>%
+  ggplot(aes(index, sentiment, fill = method)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~method, ncol = 1, scales = "free_y")
+```
+
+"Let’s look briefly at how many positive and negative words are in these lexicons."
+
+```{r}
+get_sentiments("nrc") %>% 
+  filter(sentiment %in% c("positive", "negative")) %>% 
+  count(sentiment)
+
+get_sentiments("bing") %>% 
+  count(sentiment)
+```
+
+"By implementing count() here with arguments of both word and sentiment, we find out how much each word contributed to each sentiment."
+
+```{r}
+bing_word_counts <- tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+bing_word_counts %>%
+  group_by(sentiment) %>%
+  slice_max(n, n = 10) %>% 
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(x = "Contribution to sentiment",
+       y = NULL)
+```
+
+" Let’s look at the most common words in Jane Austen’s works as a whole again, but this time as a wordcloud in Figure 2.5."
+
+```{r}
+library(wordcloud)
+
+tidy_books %>%
+  anti_join(stop_words) %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 100))
+```
+
+"Let’s do the sentiment analysis to tag positive and negative words using an inner join, then find the most common positive and negative words. Until the step where we need to send the data to comparison.cloud(), this can all be done with joins, piping, and dplyr because our data is in tidy format"
+```{r}
+library(reshape2)
+
+tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("gray20", "gray80"),
+                   max.words = 100)
+```
+
+
+"First, let’s get the list of negative words from the Bing lexicon. Second, let’s make a data frame of how many words are in each chapter so we can normalize for the length of chapters. Then, let’s find the number of negative words in each chapter and divide by the total words in each chapter. For each book, which chapter has the highest proportion of negative words?"
+```{r}
+p_and_p_sentences <- tibble(text = prideprejudice) %>% 
+  unnest_tokens(sentence, text, token = "sentences")
+
+austen_chapters <- austen_books() %>%
+  group_by(book) %>%
+  unnest_tokens(chapter, text, token = "regex", 
+                pattern = "Chapter|CHAPTER [\\dIVXLC]") %>%
+  ungroup()
+
+austen_chapters %>% 
+  group_by(book) %>% 
+  summarise(chapters = n())
+
+bingnegative <- get_sentiments("bing") %>% 
+  filter(sentiment == "negative")
+
+wordcounts <- tidy_books %>%
+  group_by(book, chapter) %>%
+  summarize(words = n())
+
+tidy_books %>%
+  semi_join(bingnegative) %>%
+  group_by(book, chapter) %>%
+  summarize(negativewords = n()) %>%
+  left_join(wordcounts, by = c("book", "chapter")) %>%
+  mutate(ratio = negativewords/words) %>%
+  filter(chapter != 0) %>%
+  slice_max(ratio, n = 1) %>% 
+  ungroup()
+```
+
+## Extending the code
+
+Once that we have reviewed the lexicons mentioned in Chapter 2, we can now include our own corpus and lexicon to apply a brief analysis.
+
+For this assignment we will be using the following works by Sigmund Freud:
+
+- A General Introduction to Psychoanalysis
+
+- Dream Psychology: Psychoanalysis for Beginners
+
+```{r Load Sigmund Freud books}
+sfreud <- gutenberg_download(c(38219, 15489))
+
+# Tidy the text data
+tidy_sfreud <- sfreud %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words)
+
+# Count the most frequent words in the tidy data
+tidy_sfreud %>%
+  count(word, sort = TRUE)
+```
+
+And we will be comparing the sentiments from the lexicons NRC and Loughran-McDonald. The Loughran-McDonald lexicon  categorizes words into six primary sentiment classes: positive, negative, uncertainty, litigious, constraining, and superfluous.
+
+```{r}
+# Perform sentiment analysis using the NRC Emotion Lexicon
+nrc_sentiment <- tidy_sfreud %>%
+  inner_join(get_sentiments("nrc")) %>%
+  count(sentiment, sort = TRUE) %>%
+  mutate(lexicon = "NRC")
+
+# Perform sentiment analysis using the Loughran-McDonald Lexicon
+loughran_sentiment <- tidy_sfreud %>%
+  inner_join(get_sentiments("loughran")) %>%
+  count(sentiment, sort = TRUE) %>%
+  mutate(lexicon = "Loughran-McDonald")
+
+# Combine the results for comparison
+combined_sentiment <- bind_rows(nrc_sentiment, loughran_sentiment)
+
+# Visualize the comparison
+ggplot(combined_sentiment, aes(x = reorder(sentiment, n), y = n, fill = lexicon)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  coord_flip() +
+  labs(title = "Comparison of Sentiment Analysis Using NRC and Loughran-McDonald Lexicons",
+       x = "Sentiment",
+       y = "Count",
+       fill = "Lexicon") +
+  theme_minimal()
+```
+ - Both the NRC and Loughran-McDonald lexicons show a significant number of negative and positive words. This could mean that Freud’s writing contains a blend of emotional language, oscillating between themes of optimism and pessimism, which is consistent with psychoanalytic discussions of human conflict and internal struggle.
+
+- The NRC lexicon identifies "trust" and "anticipation" as major emotions, which could reflect Freud’s exploration of psychological expectations and trust in the psychoanalytic process. The high occurrence of "fear" aligns with themes of anxiety and repression in his theories.
+
+- The Loughran-McDonald lexicon identifies terms related to "uncertainty," "constraining," and "litigious," suggesting that Freud’s texts may frequently discuss concepts related to ambiguity, limitations of understanding, and possibly the legal or societal constraints on behavior.
+
+- Overall, the comparison reveals that Freud’s work embodies a wide emotional range, with NRC emphasizing emotional dynamics and Loughran-McDonald uncovering aspects of uncertainty and constraint, which are central to psychoanalytic theory.
+
+Let's see now how does the emotional arc of Freud's books changes over time in his work. We can use the nrc lexicon for this, showing how the emotional tone changes throughout the text.
+
+```{r}
+# Calculate the emotional arc using the NRC lexicon
+emotional_arc <- tidy_sfreud %>%
+  inner_join(get_sentiments("nrc")) %>%
+  count(index = row_number(), sentiment) %>%
+  spread(sentiment, n, fill = 0)
+
+# Plot the emotional arc
+ggplot(emotional_arc, aes(x = index)) +
+  geom_line(aes(y = anger, color = "Anger")) +
+  geom_line(aes(y = joy, color = "Joy")) +
+  geom_line(aes(y = fear, color = "Fear")) +
+  geom_line(aes(y = sadness, color = "Sadness")) +
+  labs(title = "Emotional Arc of Freud's Books",
+       x = "Narrative Time",
+       y = "Emotion Count") +
+  theme_minimal()
+```
+- The emotional arc is heavily dominated by the "sadness" category, which is expected in a text dealing with complex psychological issues, trauma, and the unconscious mind. The high frequency of sadness may reflect Freud’s emphasis on the darker aspects of the human psyche.
+
+- The few occurrences of "anger," "fear," and "joy" suggest that these emotions are present but not as much as "sadness", possibly indicating moments in Freud’s text where he discusses more intense emotional or conflict-driven content. Further analysis of these occurrences could show if there are similarities in topics around them.
+
