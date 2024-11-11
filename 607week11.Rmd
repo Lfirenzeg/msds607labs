@@ -1,0 +1,103 @@
+---
+title: "607 Week 11"
+author: "Luis Munoz Grass"
+date: "2024-11-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Recommender Systems
+
+The objective of this assignment is to analyze an existing recommender system "that you find interesting".
+In this case I have chosen **Netflix** as a company to analyse its recommender system.
+We will:
+
+- Perform a Scenario Design analysis answering the questions: Who are the target users? What are their key goals? How does the recommender system help them accomplish their goals?. We will also consider whether it makes sense for the selected recommender system to perform scenario design twice, once for the organization (e.g. Netflix.com) and once for the organization's customers.
+
+- Attempt to reverse engineer what we can about the site, from the site interface and any available information that you can find on the Internet or elsewhere.
+
+- Include specific recommendations about how to improve the site's recommendation capabilities going forward.
+
+### Scenario Design Analysis
+
+Netflix is a good example of when it is useful to perform scenario design tailored both for Netflix as an organization and for Netflix’s individual users.
+
+**Regarding Perspective of Netflix as an organization**
+**Target Users:** The target users from Netflix perspective include subscribers with a tremendous variety in demographics, including different geographic locations, interests, and viewing preferences.
+**Key Goals:** Netflix aims to enhance user engagement and retention, maximize user satisfaction, and make informed choices about future content acquisition and decide what will produce (or stop producing, despite some series having what feels like massive followings, but apparently not by netflix standars).If Netflix is able to increase view time and user satisfaction with its personalized recommendations, it should be able to reduce churn and boost subscriber loyalty.
+**How the system helps:** Netflix’s recommendation system provides content highly tailored, and suggestions that keep users engaged, encourage binge-watching (although funny enough Netflix does not encourage to use this term...), and reduce search friction (we've all been there, scrolling eternally just to decide what to watch), aligning with Netflix's business goal of increasing time spent on the platform and overall user satisfaction.
+
+**Regarding Perspective of Netflix customer**
+
+**Target Users:** Users range from casual viewers looking for a quick recommendation to movie enthusiast and binge-watchers who enjoy exploring new content. 
+**Key Goals:** Depending on the user the goal will be different, but in general can be summarized as finding something engaging, quickly and easily without feeling overwhelmed by Netflix's extensive library. 
+**How the system helps**:  Netflix’s recommendation engine can give personalized suggestions for each user based on viewing history, behavioral data, and content characteristics, streamlining the content discovery process. 
+
+### Reverse Engineering Netflix’s Recommender System
+Netflix’s recommendation system appears to rely on a blend of sophisticated machine learning models.
+
+**Data Sources and Data Collection:** According to Netflix (n.d.), Netflix collects various types of user data, including viewing history, time of day, content interaction (like rewinds, pauses), device usage, and behavioral patterns. Unlike some platforms, Netflix focuses solely on behavioral data rather than demographic information (age, gender) to tailor its recommendations.
+
+Some of the specific types of data associated with user behavior according to Stratoflow (2023) and MakeUseOf (2022) are:
+User Viewing History
+Average viewing length
+Time of day
+Type of device
+User Ratings and Feedback
+Search History
+Interaction Data
+Time and Day of Viewing
+Device and Platform Usage
+
+**Algorithms and Techniques Used:**
+
+- **Collaborative Filtering:** Flatiron School (2021, March 9) explains how this approach identifies patterns by grouping users with similar viewing behaviors and suggests content based on what other users with similar tastes have watched.
+
+- **Content-Based Filtering:** This method relies on content metadata, such as genre, cast, director, and plot, to recommend similar titles to those that a user has enjoyed (Flatiron School, 2021).
+
+![Collaborative filtering and content based filtering (from Stratoflow: https://stratoflow.com/how-netflix-recommendation-system-works/)](C:/Users/lucho/OneDrive/Documents/607/data/Viewed-2.png)
+
+- **Deep Learning and Neural Networks:** Netflix employs deep learning to understand complex patterns in user data, providing more nuanced and effective recommendations (Stratoflow, 2023).
+
+- **Personalized Thumbnails:** Netflix personalizes thumbnails for each title based on users’ inferred preferences, such as highlighting a specific actor if that user has watched several of their movies. This increases the likelihood of engaging a user visually (stratt, 2021).
+
+**User Experience Personalization:**
+
+- **Row Customization:** As explained by Stratoflow (2023, April 20) Netflix’s home screen arranges rows and titles categories based on a user’s past viewing, highlighting genres or themes most relevant to them. The way these are displayes are also seeking to maximize capturing the user attention, as the person reads from left to right, and downwards. 
+
+![Netflix Layout to capture user attention (from Stratoflow: https://stratoflow.com/how-netflix-recommendation-system-works/)](C:/Users/lucho/OneDrive/Documents/607/data/netflixrecommendations.png)
+
+- **Continuous Updates:** The recommendation system adapts in real-time, adjusting suggestions based on immediate user interactions to present the most relevant content continually.
+
+
+### Recommendations for Enhancing Netflix's Recommendation Capabilities
+
+I would like to preface this section by saying that any possible recommendation I include here may well already be part of Netflix objectives, plans or even attempted strategies, as I am not privy to all of this information about such a massive company.
+Having said my disclaimer, based on what I've found about Netflix recommender systems, some features I would suggest are:
+
+**Enhance User Feedback Mechanisms:** At some point Netflix had the option to rate its titles with Stars instead of simply thumbs up or down, but over time they found that people tended to qualify more frequently the titles using a simpler system (binary like or not like with thumbs up or down). However, I believe that if a user wanted to access a way to filter even further the suggestions, the user could activate "advanced feedback" allowing for either stars or numerical rating, selecting surveys about that would show titles that have seen, or selecting key words about what was it that they liked or disliked about titles.
+
+**Promoting (or not) Content Diversity:** If the the user had access to a broader range of content, preventing the "filter bubble" effect. This could involve a "Discover" section that highlights diverse genres or international content, encouraging users to explore beyond their usual preferences. 
+
+**Improve Transparency:** There are specific Netflix categories sometimes with very obscure names, each one has a code. For example Gentle British Reality TV (with the code 81240711) or Witchcraft & the Dark Arts (81552046), or 90-Minute Movies (81466194) (Netflix, 2022). Most people are not aware about these categories, so if the user could access a Categories section that displays a couple of these at a time they may be able to scratch a very specific itch they may not know they have.
+
+### Final Thoughts
+Netflix’s recommendation system is a fascinating and complex area, with huge potential for more research. It’s impressive how Netflix tailors content suggestions through techniques like collaborative filtering, content-based algorithms, and neural networks, all aimed at keeping users engaged. However, there’s still plenty of room to explore.
+For example, **A/B testing** is key to Netflix’s strategy, letting the platform test various recommendation methods, layouts, and thumbnail designs to guide their business decisions with data. In addition, Netflix’s use of **neural networks** digs into deeper patterns in user behavior, using models that can analyze everything from thumbnail engagement to viewing sequences, helping to tell what each user might enjoy next.
+
+## References
+
+Flatiron School. (2021, March 9). The Science Behind Netflix’s Recommendations. Retrieved November 6, 2024, from https://flatironschool.com/blog/science-behind-netflix-recommendations/
+
+MakeUseOf. (2022, March 29). How Netflix's Recommendations Work (and How to Make Them Better). Retrieved November 6, 2024, from https://www.makeuseof.com/how-netflix-recommendations-work/
+
+Netflix. (2022, October 25). The story behind Netflix’s secret category codes. Netflix Tudum. Retrieved November 10, 2024, from https://www.netflix.com/tudum/articles/netflix-secret-codes-guide
+
+Netflix. (n.d.). How Netflix’s Recommendations System Works. Retrieved November 6, 2024, from https://help.netflix.com/en/node/100639 
+
+Stratoflow. (2023, April 20). How Netflix Recommendation System Works in 2023 – A Full Overview. Retrieved November 6, 2024, from https://stratoflow.com/how-netflix-recommendation-system-works/
+
+Statt, N. (2021, October 18). The Netflix Data Personalization that Keeps You Watching. Wired. Retrieved November 6, 2024, from https://www.wired.com/story/netflix-data-personalisation-watching/
