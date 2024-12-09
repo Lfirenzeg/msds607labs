@@ -1,0 +1,637 @@
+---
+title: "Data 607 Final Project"
+author: "Luis Munoz Grass"
+date: "2024-11-30"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Abstract
+This study investigates the relationship between quality-of-life factors and depression risk using data from a survey conducted in India (January–June 2023) and public health data from New York City (2007–2021). The survey encompassed 2,556 individuals and collected information on dietary habits, sleep duration, work/study hours, age, gender, and family history of mental illness. Logistic regression models and visualizations were employed to identify key predictors of depression, while NYC data provided a broader perspective on mental health's societal implications.
+
+Key findings indicate that unhealthy dietary habits significantly increase depression risk, particularly among younger populations. Insufficient sleep (<5 hours) trends toward higher risk, whereas longer sleep (>8 hours) demonstrates a protective effect. Work/study hours strongly correlate with increased depression risk, and older age consistently emerges as protective. Family history of mental illness exhibits marginal significance, while gender is not a significant predictor. Analyzing NYC mortality data reveals that "Intentional Self-Harm" and "Mental and Behavioral Disorders due to Substance Use" remain critical public health concerns.
+
+These findings highlight the importance of promoting healthy dietary and sleep habits, managing workloads, and developing targeted interventions for younger demographics. The inclusion of NYC data underscores the consequences for society of untreated mental health issues, such as suicide and substance-related deaths. Future research should focus on non-linear relationships and cultural influences on depression risk. These insights can inform public health policies and preventive measures to mitigate mental health challenges across diverse populations.
+
+
+## Introduction
+Mental health is a critical public health issue, impacting individuals and communities in the entire world. This study examines the question: "How do different quality-of-life factors relate to the risk of depression?" using data from a survey conducted in India and complementary data from New York City on leading causes of death. By analyzing variables such as dietary habits, sleep duration, work/study hours, age, gender, and family history of mental illness, this research aims to highlight key predictors of depression and their societal implications.
+
+The Indian dataset, collected between January and June 2023, provides a detailed examination of depression risk factors across 2,556 individuals. This analysis uses statistical modeling to explore relationships between lifestyle factors and depression risk, identifying potential areas for intervention. Meanwhile, NYC's Leading Causes of Death dataset (2007–2021) offer context against broad society trends, focusing on mortality data related to "Intentional Self-Harm" and "Mental and Behavioral Disorders due to Substance Use."
+
+Depression risk factors such as dietary habits, sleep patterns, and workload management are in theory modifiable, offering opportunities for targeted prevention strategies. Additionally, understanding the public health burden of depression-related causes of death in NYC highlights the need for systemic interventions, including improved access to care and mental health education.
+
+By comparing these datasets, this research contributes to the broader discourse on mental health, offering insights for developing interventions that address depression risk factors across diverse populations.
+
+## Data Preparation
+
+The main data for this project comes from a data set hosted in Kaggle:
+https://www.kaggle.com/datasets/sumansharmadataworld/depression-surveydataset-for-analysis/data
+
+The surveyed participants belonged to diverse backgrounds and provided voluntary information on factors such as age, gender, city, degree, job satisfaction, study satisfaction, study/work hours, and family history among others. The conductors of the study included a variable named Depression as a final assessment of whether the participant was at risk of depression or not based on their responses to lifestyle and other demographic factors. 
+
+The data will be transformed, analyzed, and compared with other studies. Additional contextual information may be drawn from peer-reviewed literature and reputable public health data sets to support the analysis and validate findings.
+
+Loading the needed libraries:
+
+```{r load-packages, message=FALSE}
+library(readr)
+library(kaggler)
+library(dplyr)
+library(tidyr)
+library(reshape2)
+library (stringr)
+library (ggplot2)
+library (infer)
+library(rpart)
+library(rpart.plot)
+```
+
+First, we connect with Kaggler using an API
+```{r kaggler creds, include=FALSE}
+Sys.setenv(KAGGLE_USERNAME = Sys.getenv("KAGGLE_USERNAME"))
+Sys.setenv(KAGGLE_KEY = Sys.getenv("KAGGLE_KEY"))
+kgl_auth(username = Sys.getenv("KAGGLE_USERNAME"), key = Sys.getenv("KAGGLE_KEY"))
+
+# If you are trying to replicate this code
+# Setup Instructions:
+# 1. Go to your Kaggle account settings: https://www.kaggle.com/settings
+# 2. Generate an API token (kaggle.json file).
+# 3. Place the kaggle.json file in your working directory or
+#    add the following to your .Renviron file:
+#    KAGGLE_USERNAME=your_username
+#    KAGGLE_KEY=your_api_key
+# 4. Restart your R session or use Sys.setenv() to set credentials.
+# Additionally, the kaggler package used here has useful information at: https://medium.com/mcd-unison/how-to-use-kaggle-api-to-download-datasets-in-r-312179c7a99c
+```
+
+Then load the data from Kaggle
+```{r kaggle loading}
+response <- kgl_datasets_download_all(owner_dataset = "sumansharmadataworld/depression-surveydataset-for-analysis")
+
+download.file(response[["url"]], "data/temp.zip", mode="wb")
+unzip_result <- unzip("data/temp.zip", exdir = "data/", overwrite = TRUE)
+csv_file <- list.files("data", pattern = "final_depression_dataset.*\\.csv$", full.names = TRUE)
+depression_survey_data <- read_csv(csv_file)
+```
+
+## Initial Data Summary
+
+Now we can take a look at the structure of the dataset 
+```{r initial summary}
+summary(depression_survey_data)
+```
+
+We have:
+
+Cases: Individual survey respondents.
+Count: 2,556 cases.
+
+This is an observational study, targeting Depression as the response variable, with a categorical Yes/No type.
+The explanatory variables are: Age, Gender, Academic Pressure, Work Pressure, Study Satisfaction, Job Satisfaction, Sleep Duration, Dietary Habits, Work/Study Hours, Financial Stress, Family History of Mental Illness. These can be numerical or categorical depending on the variable.`
+
+```{r categorical variable}
+dietary_habits_count <- depression_survey_data %>%
+  group_by(`Dietary Habits`) %>%
+  summarise(Count = n()) %>%
+  arrange(desc(Count))
+
+sleep_duration_count <- depression_survey_data %>%
+  group_by(`Sleep Duration`) %>%
+  summarise(Count = n()) %>%
+  arrange(desc(Count))
+
+print("Dietary Habits Count:")
+print(dietary_habits_count)
+
+print("Sleep Duration Count:")
+print(sleep_duration_count)
+```
+
+
+Some additional information:
+```{r add info}
+# Frequency of Depression Risk
+table(depression_survey_data$Depression)
+
+# Average Age of Respondents
+mean(depression_survey_data$Age, na.rm = TRUE)
+
+# Gender Breakdown
+table(depression_survey_data$Gender)
+```
+The conductors of the survey ended up with 455 out of 2556 cases as being at risk of depression (17.8%), with the average age of those at risk of depression being 39 year-old. 
+
+```{r sleep and diet habits}
+# Sleep Duration Visualization
+ggplot(depression_survey_data, aes(x = `Sleep Duration`, fill = Depression)) +
+  geom_bar(position = "dodge") +
+  labs(title = "Sleep Duration vs Depression Risk",
+       x = "Sleep Duration",
+       y = "Count",
+       fill = "Depression") +
+  theme_minimal()
+
+# Dietary Habits Visualization
+ggplot(depression_survey_data, aes(x = `Dietary Habits`, fill = Depression)) +
+  geom_bar(position = "dodge") +
+  labs(title = "Dietary Habits vs Depression Risk",
+       x = "Dietary Habits",
+       y = "Count",
+       fill = "Depression") +
+  theme_minimal()
+```
+Initial key insights we can gather: 
+- Participants sleeping less than 5 have higher counts of individuals  at risk of depression compared to those sleeping more than 8 hours.
+- Healthy dietary habits have the lowest count of individuals at risk of depression.
+
+These two are some factors to look at more in depth when assessing risk of depression. 
+
+
+## Differentiating data for Students and Workers
+
+We can see that there is missing data throughout the table depending on the person being a working professional or a student. In order to analyze some of the variables, we will split the table in 2 according to the worker/student status. Additionally will start removing columns that are not relevant for this analysis such as Name,Degree and City.
+
+Notably, 
+
+```{r remove columns}
+depression_survey_data <- depression_survey_data %>%
+  select(-Name, -Degree, -City)
+```
+
+Creating separate tables:
+```{r tables for Students and Workers}
+student_data <- depression_survey_data %>%
+  filter(`Working Professional or Student` == "Student") %>%
+  select(-`Working Professional or Student`, -Profession, -`Work Pressure`, -`Job Satisfaction`)
+
+worker_data <- depression_survey_data %>%
+  filter(`Working Professional or Student` == "Working Professional") %>%
+  select(-`Working Professional or Student`, -`Academic Pressure`, -`Study Satisfaction`, -`CGPA`, -Profession)
+```
+
+**Visualizing perception of different factors for students:**
+```{r student factors}
+student_data_long <- melt(student_data, 
+                          id.vars = c("Depression"), 
+                          measure.vars = c("Academic Pressure", "Financial Stress", "Study Satisfaction"))
+
+ggplot(student_data_long, aes(x = value, color = variable, group = variable)) +
+  geom_line(stat = "count") +
+  labs(title = "Academic Pressure, Financial Stress, and Study Satisfaction (Students)",
+       x = "Value (Scale: 1-5)",
+       y = "Count",
+       color = "Variable") +
+  theme_minimal()
+```
+
+Insights about student data:
+
+- Academic Pressure and Financial Stress peak at value 2, indicating that most students experience low to moderate academic and financial pressure.
+ 
+- Study Satisfaction has an inverse relationship compared to the other two variables, peaking at value 4. This could indicate that higher satisfaction is common among students with lower stress and pressure.
+
+- There may be a correlation between low academic/financial stress and higher study satisfaction.
+Understanding the relationship of these variables could guide interventions to reduce stress and improve satisfaction.
+
+**Visualizing perception of different factors for workers:**
+```{r worker factors}
+worker_data_long <- melt(worker_data, 
+                         id.vars = c("Depression"), 
+                         measure.vars = c("Work Pressure", "Financial Stress", "Job Satisfaction"))
+
+ggplot(worker_data_long, aes(x = value, color = variable, group = variable)) +
+  geom_line(stat = "count") +
+  labs(title = "Work Pressure, Financial Stress, and Job Satisfaction (Workers)",
+       x = "Value (Scale: 1-5)",
+       y = "Count",
+       color = "Variable") +
+  theme_minimal()
+```
+
+Insights about worker data:
+
+- Work Pressure increases steadily from value 1 to 5, indicating a broader spread of experiences compared to students.
+
+- Financial Stress peaks at value 2 and decreases for higher values, similar to students.
+
+- Job Satisfaction peaks at value 4, suggesting moderate satisfaction levels among workers.
+
+Workers seem to experience more variability in work pressure than students do in academic pressure.
+Financial stress and job satisfaction appear inversely related, indicating that financial difficulties may negatively impact overall job satisfaction.
+
+## Association between Depression and Dietary Habits
+
+We'll look into variables that are complete in data for both students and working professionals. If we want to analyze the relationship between the response variable (Depression, yes/no), and potential explanatory variables such as Dietary Habits we can use a Chi-Squared test.
+
+Since Depression is categorical with two levels and Dietary Habits is also categorical with multiple levels (Healthy, Moderate, Unhealthy), a chi-squared test would evaluate whether the observed distribution of data differs significantly from what would be expected under the null hypothesis (independence between variables), and because tests like t-tests or regression are unsuitable for purely categorical data.
+
+In this case we have a **Null Hypothesis** of no association between dietary habits and depression risk.
+Meanwhile, the **Alternative Hypothesis** will be that there is an association between dietary habits and depression risk.
+
+### Chi-squared test
+
+```{r depression and diet habits}
+chisq_test <- chisq.test(table(depression_survey_data$Depression, depression_survey_data$`Dietary Habits`))
+print(chisq_test)
+```
+
+Since the p-value is significantly less than 0.05 (2.456e-07), we can reject the null hypothesis, indicating there is a significant association between dietary habits and depression risk.
+
+### Logistic Regression 
+
+We now will model the probability of depression as a function of dietary habits. We are gonna choose the category Healthy as baseline to compare against the other 2:
+
+```{r Logistic Regression Diet habits}
+# converting Depression to binary
+depression_survey_data$Depression_Binary <- ifelse(depression_survey_data$Depression == "Yes", 1, 0)
+
+# fitting logistic regression model
+diet_model <- glm(Depression_Binary ~ `Dietary Habits`, data = depression_survey_data, family = binomial())
+summary(diet_model)
+```
+
+```{r coefficients from the univariate model}
+# Extracting coefficients from the model
+coefficients <- coef(diet_model)
+
+# Calculating odds ratios for each level of Dietary Habits
+odds_ratios <- exp(coefficients)
+print(odds_ratios)
+
+# Finally, obtaining the confidence intervals for the odds ratios
+conf_int <- exp(confint(diet_model))
+print(conf_int)
+```
+
+- **Healthy:** Once we have applied the model, we find the intercept to be -1.8953 (baseline log-odds of depression using Healthy as reference category), and once we replace the value in the formula p= (e^intercept)/(1+e^intercept) we obtain a probability of depression in the Healthy Category of approximately **0.13**, or 13%.
+
+- **Moderate:** The estimate for the Moderate category is 0.3059, and p=0.0264. The odds ratio (e^estimate) is approximately **1.36**, meaning that those participants with a "Moderate" diet are 36% more likely to be at risk of depression than those with a "Healthy" diet.
+
+- **Unhealthy:** The estimate for the Unhealthy category is 0.6943, and p<0.001. The odds ratio (e^estimate) is approximately **2.00**, meaning that those participants with an "Unhealthy" diet are 2 times more likely to be at risk of depression than those with a "Healthy" diet.
+
+### Multivariate logistic regression
+
+At this point, according to the model, we can say that diet habits play a major role in risk of depression. But what happens we want to include other variables in our model?
+We'll add now Sleep Duration, and Work/Study Hours:
+
+```{r Multivariate logistic regression Diet habits}
+
+multivariate_model <- glm(Depression_Binary ~ `Dietary Habits` + `Sleep Duration` + `Work/Study Hours` + `Age` + `Family History of Mental Illness` + Gender,
+                          data = depression_survey_data, 
+                          family = binomial())
+summary(multivariate_model)
+
+```
+
+```{r coefficients and odd ratios from the multivariate model}
+coefficients_multi <- coef(multivariate_model)
+odds_ratios_multi <- exp(coefficients_multi)
+
+print(odds_ratios_multi)
+
+conf_int_multi <- exp(confint(multivariate_model))
+print(conf_int_multi)
+
+```
+
+The reference group is those with healthy dietary habits and sleep duration of 5 to 6 hours.
+
+The intercept estimate for the reference group is 2.39, which represents the baseline log-odds of depression. Transforming this into a probability, the baseline probability of depression for the reference group is approximately 91%.
+
+- For diet habits, the results are significantly different with the previous model the odds ratio for **moderate** diet was **1.69**  (vs 1.36), and the odds ratio for **unhealthy** diet was **2.82** vs 2.00
+
+**Including sleep duration**
+
+- Estimate for the group that sleeps **7-8 hours** is -0.095, with p=0.604, meaning is not significant, suggesting no difference in depression risk compared to the reference group.
+
+- Estimate for the group that sleeps **more than 8 hours** is -0.401, with p=0.035. The odds ratio is approximately 0.67, indicating participants sleeping more than 8 hours are 33% less likely to be at risk of depression compared to the reference group.
+
+- The estimate for the group that sleeps **less than 5 hours** is 0.25 with p=0.160. The odds ratio is approximately 1.28. While not statistically significant, this suggests a trend where participants sleeping less than 5 hours may have a higher risk of depression
+
+**Including Work/Study Hours**
+
+- The estimate when including work/study hours is 0.144, with p<0.001, meaning each additional hour of work/study increases the log-odds of depression by 0.144. The odds ratio is approximately 1.15, indicating that each extra hour of work/study increases the risk of depression by 15%.
+
+**Including Age**
+
+- The estimate when including age is -0.167, with p<0.001. The odds ratio is approximately 0.85, indicating that older participants are 15% less likely to be at risk of depression for every additional year of age.
+
+**Including History of Mental Illness**
+
+- The estimate when including History of Mental Illness is 0.225, with p=0.081. The odds ratio is approximately 1.25, suggesting that participants with a family history of mental illness are 25% more likely to be at risk of depression, although this result is only marginally significant.
+
+**Including Gender**
+- The estimate when including Gender is -0.051, with p=0.695. The odds ratio is approximately 0.95, suggesting no significant difference in depression risk between males and females in this model.
+
+### Model Visualization
+
+Let's now visualize how predicted probabilities of depression change with respect to Dietary Habits, Sleep Duration, and Work/Study Hours.
+
+**Predicted Depression Risk by Dietary Habits**
+
+```{r plots multivariate model dietary habits}
+depression_survey_data$predicted_prob <- predict(multivariate_model, type = "response")
+
+ggplot(depression_survey_data, aes(x = `Dietary Habits`, y = predicted_prob)) +
+  geom_boxplot(aes(fill = `Dietary Habits`)) +
+  labs(title = "Predicted Depression Risk by Dietary Habits",
+       x = "Dietary Habits",
+       y = "Predicted Probability of Depression",
+       fill = "Dietary Habits") +
+  theme_minimal()
+```
+Observations: 
+The median predicted probability of depression increases as dietary habits worsen:
+The spread of predicted probabilities also widens with unhealthy dietary habits.
+
+The results align with the odds ratio analysis, that unhealthy dietary habits are a strong risk factor for depression.
+This highlights the importance of dietary interventions in managing mental health.
+
+
+**Predicted Depression Risk by Sleep Duration**
+```{r plots multivariate model sleep duration}
+ggplot(depression_survey_data, aes(x = `Sleep Duration`, y = predicted_prob)) +
+  geom_boxplot(aes(fill = `Sleep Duration`)) +
+  labs(title = "Predicted Depression Risk by Sleep Duration",
+       x = "Sleep Duration",
+       y = "Predicted Probability of Depression",
+       fill = "Sleep Duration") +
+  theme_minimal()
+```
+Observations:
+Predicted probabilities for those who sleep 5-6 Hours and 7-8 Hours are relatively similar.
+Those sleep more Than 8 Hours have predicted probabilities that are slightly lower than the baseline but show more variability.
+Those who sleep less Than 5 Hours have a noticeably higher predicted probabilities.
+
+From this we can say that less Than 5 Hours of sleep is a significant risk factor for depression, consistent with the multivariate regression results.
+When considering interventions to ensure adequate sleep duration, reaching at least 5-6 hours may help reduce depression risk.
+More than 8 Hours of sleep does not appear to significantly increase or decrease depression risk.
+
+**Predicted Depression Risk by Work/Study Hours**
+```{r plots multivariate model work study hours}
+ggplot(depression_survey_data, aes(x = `Work/Study Hours`, y = predicted_prob)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "loess", color = "blue", se = FALSE) +
+  labs(title = "Predicted Depression Risk by Work/Study Hours",
+       x = "Work/Study Hours",
+       y = "Predicted Probability of Depression") +
+  theme_minimal()
+```
+
+Observations:
+We can immediately see a clear positive trend, were predicted probabilities of depression increase with longer work/study hours.
+The curve seems to steepen slightly more beyond 7.5 hours per day, indicating higher risks at longer durations of either work/study.
+At 10+ hours, predicted probabilities often exceed 0.25.
+
+We can then say that longer work/study hours are a significant risk factor for depression.
+Simultaneously, limiting daily work/study hours to around 8 hours might help reduce depression risk.
+The results emphasize the need for work-life balance and stress management strategies.
+
+**Predicted Depression Risk by Age**
+
+```{r plots multivariate model age}
+ggplot(depression_survey_data, aes(x = Age, y = predicted_prob)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "loess", color = "blue", se = FALSE) +
+  labs(title = "Predicted Depression Risk by Age",
+       x = "Age",
+       y = "Predicted Probability of Depression") +
+  theme_minimal()
+
+```
+Observations:
+The plot shows a clear negative relationship between age and the predicted probability of depression. Younger participants are significantly more likely to have a higher predicted probability of depression.
+Individuals under the age of 30 exhibit predicted probabilities exceeding 0.50 in many cases, while older participants, particularly those aged 40 and above, exhibit consistently low predicted probabilities, often under 0.10.
+
+These results align with other findings that suggest younger populations are more vulnerable to depression, possibly due to stressors related to academics, work, and social pressures.
+
+**Predicted Depression Risk by Family History of Mental Illness**
+```{r plots multivariate model Fam History}
+ggplot(depression_survey_data, aes(x = `Family History of Mental Illness`, y = predicted_prob)) +
+  geom_boxplot(aes(fill = `Family History of Mental Illness`)) +
+  labs(title = "Predicted Depression Risk by Family History of Mental Illness",
+       x = "Family History of Mental Illness",
+       y = "Predicted Probability of Depression",
+       fill = "Family History of Mental Illness") +
+  theme_minimal()
+```
+
+Observations:
+Participants with a family history of mental illness ("Yes") show slightly higher median predicted probabilities compared to those without a family history. The distribution for individuals with a family history of mental illness is wider, indicating more variability in predicted probabilities within this group. The CIs and the borderline p-value from the regression suggest a possible relationship between family history and depression risk, though it is less significant than other variables.
+
+A family history of mental illness could indicate genetic predispositions or shared environmental stressors, highlighting the importance of considering family background in mental health assessments.
+
+**Predicted Depression Risk by Gender**
+```{r}
+ggplot(depression_survey_data, aes(x = Gender, y = predicted_prob)) +
+  geom_boxplot(aes(fill = Gender)) +
+  labs(title = "Predicted Depression Risk by Gender",
+       x = "Gender",
+       y = "Predicted Probability of Depression",
+       fill = "Gender") +
+  theme_minimal()
+```
+
+Observations:
+With this model, both males and females have similar distributions of predicted probabilities, with no noticeable difference in median risk between the two genders. The variability is slightly higher for males, with more outliers showing elevated depression probabilities.
+
+
+### Interaction between factors
+Let’s test whether the effect of Dietary Habits on depression depends on, age,alongside other predictors like sleep duration, work/study hours, family history of mental illness, and gender.
+
+```{r interaction}
+interaction_model <- glm(Depression_Binary ~ `Dietary Habits` * `Age` + `Sleep Duration` + `Work/Study Hours` + `Family History of Mental Illness` + Gender,
+                          data = depression_survey_data, 
+                          family = binomial())
+
+summary(interaction_model)
+```
+Some main effects observed:
+
+Moderate Dietary Habits have an estimate of 0.06697, p=0.9204, indicating no significant effect on depression risk compared to healthy dietary habits.
+Unhealthy Dietary Habits have an estimate of 0.21512, p=0.7321, indicating no significant effect on depression risk compared to healthy dietary habits.
+
+For age,  Each additional year of age decreases the log-odds of depression risk by0.18550. The odds ratio is approximately 0.83, meaning an 17% decrease in depression risk per year.
+
+For sleep, the only p significant was for the group that sleep more than 8 hours (p=0.0385). Sleeping more than 8 hours reduces depression risk compared to the reference group (5-6 hours). The odds ratio is approximately 0.67, meaning a 33% reduction in risk.
+
+For work/study hours we have a higly significant p<4.85 e-16. Each additional hour of work/study increases the log-odds of depression risk by 0.14376. Odds ratio of meaning a 15% increase in risk per additional hour.
+
+For family history, we have a marginally significant p of 0.0834, meaning that having a family history of mental illness may increase depression risk, with an odds ratio of approximately 1.25, or a 25% increase in risk.
+
+```{r plot interaction effects}
+ggplot(depression_survey_data, aes(x = Age, y = predicted_prob, color = `Dietary Habits`)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "loess", se = FALSE) +
+  labs(title = "Interaction: Dietary Habits and Age on Depression Risk",
+       x = "Age",
+       y = "Predicted Probability of Depression",
+       color = "Dietary Habits") +
+  theme_minimal()
+
+```
+There seems to be a general decline of depression risk with age for all dietary habit groups. This aligns with the model results, where age has a negative coefficient, indicating a protective effect as individuals get older.
+
+Regarding dietary habit differences healthy diet shows the lowest predicted probability of depression at all ages. The protective effect of a healthy diet is more pronounced in younger individuals, where the gap between dietary categories is wider. With a moderate diet data seems to fall between healthy and unhealthy diets in terms of depression risk across all ages. Finally, an unhealthy diet consistently has the highest predicted probability of depression, particularly pronounced in younger individuals.
+
+The differences between dietary groups are more pronounced at younger ages (under 30 years), where unhealthy diets are associated with significantly higher risks. As age increases, these differences diminish, and dietary habits have a smaller impact on depression risk.
+
+### Decision Tree
+
+Let's now see how a decision tree would summarize the information from the dataset. After ensuring Depression is transformed to binary we can include the factors that we have been modeling: Age, Dietary Habits, Sleep Duration, Work/study hours, and Family history of mental illness. 
+
+```{r decision tree depression}
+depression_survey_data$Depression_Binary <- ifelse(depression_survey_data$Depression == "Yes", 1, 0)
+
+# Fit a decision tree model
+tree_model <- rpart(Depression_Binary ~ `Dietary Habits` + `Sleep Duration` + `Work/Study Hours` + Age + `Family History of Mental Illness`,
+                    data = depression_survey_data, method = "class")
+
+# Plot the decision tree
+rpart.plot(tree_model, type = 3, extra = 102, main = "Decision Tree for Predicting Depression Risk")
+
+```
+- The tree splits on Age 34 at the root, indicating that older age is the strongest predictor for lower depression risk. This aligns with our general findings so far, where age is consistently identified as a protective factor.
+
+- For individuals younger than 34, additional splits suggest other lifestyle factors like work/study hours, dietary habits, and sleep duration play a larger role in depression risk.
+
+- Work/Study Hours emerge as an important factor for younger individuals (more than 34 years). Fewer work/study hours (less than 6) reduce the likelihood of depression, while those with longer work/study hours (more or equal to 6) face higher depression risk, consistent with the logistic regression results that identified longer work/study hours as a significant risk factor.
+
+- Dietary habits split into "Healthy/Moderate" and "Unhealthy," with "Unhealthy" consistently associated with higher depression risk. For those with unhealthy dietary habits, sleep duration further impacts depression risk: sleeping less than 5 hours increases depression risk, while sleeping 5–6 or 7–8 hours is protective.
+
+-For younger individuals (less than 22 years), longer work/study hours (more or equal to 9) and unhealthy dietary habits are associated with the highest depression risk. This reinforces the conclusion that younger populations are particularly vulnerable to modifiable risk factors like diet and workload.
+
+
+## Comparison with other studies
+
+The dataset used in this study is relatively small compared to national-level analyses in the United States. However, insights gained are consistent with broader findings about depression risk factors. According to Mental Health America (2023), the prevalence of depression is strikingly high in the U.S., with:
+
+- 16.39% of youth aged 12–17 experiencing at least one major depressive episode (MDE) in 2023, affecting approximately 4.08 million young individuals.
+
+- Among youth with depression, 11.5% (or 2.86 million) face severe depression impairing daily functioning.
+
+- 20.78% of adults (52.17 million people) are diagnosable with mental illness, with many co-occurring factors, including anxiety and chronic health conditions.
+
+- Access to treatment remains a challenge, with 28.2% of adults and 59.8% of youth with depression unable to access mental health care. Additionally, national shortages of mental health providers contribute to significant disparities in treatment availability.
+
+### How does this relate to NYC?
+
+The previous findings, alongside national data, underscore the importance of identifying modifiable lifestyle factors—such as dietary habits, sleep duration, and workload management—that influence depression risk. Addressing these factors can help prevent severe outcomes, including intentional self-harm and other related causes of death.
+
+Building on the national context, we examine NYC-specific data to understand how depression and related mental health factors manifest in mortality statistics. This helps identify areas for targeted public health interventions.
+
+The New York City Leading Causes of Death dataset provides a localized perspective, highlighting the public health implications of depression-related issues. Between 2007 and 2021, two key causes of death linked to mental health include:
+
+- Intentional Self-Harm (Suicide): A consistent contributor to mortality, with deaths ranging from 250 in 2007 to a high of 299 in 2019 before decreasing sharply during the pandemic years (possibly due to under reporting or .
+ 
+- Mental and Behavioral Disorders due to Accidental Poisoning and Psychoactive Substance Use: This category has seen a concerning rise, particularly in recent years, with deaths increasing from 704 in 2007 to 1,988 in 2020.
+
+Source: https://data.cityofnewyork.us/Health/New-York-City-Leading-Causes-of-Death/jb7j-dtam/about_data
+
+```{r load nyc death causes data}
+nyc_causes_death <- read.csv("https://raw.githubusercontent.com/Lfirenzeg/msds607labs/refs/heads/main/Final%20Project/New_York_City_Leading_Causes_of_Death_20241128.csv")
+```
+
+**Mental and Behavioral Disorders, due to accidental poisoning and other psychoactive substance abuse**
+```{r totals per year poisoning, substance abuse}
+# we filter for "suicide" and aggregate totals by year
+mental_substance_totals <- nyc_causes_death %>%
+  filter(str_detect(Leading.Cause, regex("mental", ignore_case = TRUE))) %>%
+  group_by(Year) %>%
+  summarize(Total_Deaths = sum(as.numeric(Deaths), na.rm = TRUE))
+
+print(mental_substance_totals)
+```
+
+```{r plot mental-substance}
+ggplot(mental_substance_totals, aes(x = Year, y = Total_Deaths)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "red", size = 2) +
+  labs(
+    title = "Total Deaths Due to Mental and Behavioral Disorders due to Substance Use (NYC)",
+    x = "Year",
+    y = "Total Deaths"
+  ) +
+  ylim(0, max(mental_substance_totals$Total_Deaths)) +
+  theme_minimal()
+```
+
+Deaths in this category have risen dramatically, from 704 in 2007 to 1,988 in 2020, reflecting a growing crisis in substance-related mental health issues.
+
+
+**Intentional Self-Harm**
+```{r totals per year self-harm}
+# we filter for "suicide" and aggregate totals by year
+self_harm_totals <- nyc_causes_death %>%
+  filter(str_detect(Leading.Cause, regex("suicide", ignore_case = TRUE))) %>%
+  group_by(Year) %>%
+  summarize(Total_Deaths = sum(as.numeric(Deaths), na.rm = TRUE))
+
+print(self_harm_totals)
+```
+
+```{r sef-harm plot}
+ggplot(self_harm_totals, aes(x = Year, y = Total_Deaths)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "red", size = 2) +
+  labs(
+    title = "Total Deaths Due to Intentional Self-Harm (NYC)",
+    x = "Year",
+    y = "Total Deaths"
+  ) +
+  ylim(0, max(self_harm_totals$Total_Deaths)) + 
+  theme_minimal()
+```
+
+- Deaths from intentional self-harm have fluctuated but remained a critical concern. After peaking in 2019 at 299 deaths, the numbers decreased to 55 deaths in 2020, likely influenced by reporting gaps or pandemic-related factors.
+
+## Conclusions
+
+**Dietary Habits:**  Unhealthy diets significantly increase depression risk, particularly among younger populations. This finding emphasizes the importance of dietary interventions in mental health management, consistent with national reports identifying adverse childhood experiences and lifestyle factors as critical to youth mental health.
+
+**Sleep Duration:** Insufficient sleep (<5 hours) trends toward increased depression risk, while longer sleep (>8 hours) shows a protective effect. However, these effects are context-dependent and not always statistically significant.
+
+**Work/Study Hours:** Longer hours correlate strongly with higher depression risk, highlighting the critical role of workload management, a finding supported by national data linking academic and work pressures with youth mental health challenges.
+
+**Age:** Age showed a consistent negative association with depression risk suggesting that older individuals are less vulnerable, pointing to unique challenges faced by younger populations, such as social media use, bullying, and academic pressure.
+
+**Family History of Mental Illness:** A family history shows marginal significance, indicating potential genetic or environmental contributions to depression risk, in line with findings from national studies on co-occurring conditions.
+
+**Gender:** Gender did not emerge as a significant predictor, suggesting that depression risk factors may be more influenced by other variables.
+
+The NYC-specific data on suicide and substance-related deaths highlights the broader public health implications of mental health challenges. While deaths from intentional self-harm (suicide) showed fluctuations, deaths from substance use disorders rose dramatically, underscoring the need for robust mental health strategies in urban populations.
+
+### Implications
+
+- Dietary and Lifestyle interventions seem to be an extremely important area to target, since promoting healthy eating and balanced sleep patterns can be preventive measures. Special attention should be given to younger populations, these habits exert a stronger influence on depression risk. 
+
+-  Policies aimed at reducing academic and work-related stress could alleviate the pressures contributing to rising mental health issues. NYC's younger populations, particularly those burdened by excessive demands, would benefit most from such reforms.
+
+- Given the compounded effects of poor dietary habits, insufficient sleep, and young age on depression risk, targeted interventions tailored for vulnerable groups—such as youth and individuals with a family history of mental illness—are essential.
+
+- NYC mortality data underscores the urgent need for sustainable investments in mental health infrastructure, focusing on preventive care and resource accessibility. Addressing provider shortages and disparities in care is essential for reducing mental health-related mortality.
+
+### Limitations
+
+- The dataset is based on a survey conducted in India, which may limit how much the findings can be generalized to other cultural, socioeconomic, and geographic contexts. Also, depression risk factors may vary significantly across regions.
+
+- Even though the sample size of 2,556 can be enough for statistical modeling, it may not capture the full diversity of experiences or represent smaller subpopulations.
+
+- Given the nature of study, causality cannot be established. Relationships identified between variables, such as dietary habits and depression risk are correlational and may be influenced by factors that were not measured.
+
+- Since the survey relies on self-reported data, is highly subject to bias, including recall bias, social desirability bias, and misreporting. For instance, participants may underreport unhealthy habits or overstate positive behaviors.
+
+- While NYC mortality data provides valuable insights into broader public health implications, underreporting or data gaps during certain periods, such as the COVID-19 pandemic, may affect the interpretation of trends related to suicide and substance use disorders.
+
+## References
+
+City of New York. (2022). New York City leading causes of death. NYC Open Data. Retrieved November 11, 2024, from https://data.cityofnewyork.us/Health/New-York-City-Leading-Causes-of-Death/jb7j-dtam/about_data
+
+Mental Health America. (2023). 2023 state of mental health in America report. Mental Health America. https://mhanational.org/issues/state-mental-health-america
+
+SumanSharmaDataWorld. (2023). Depression survey dataset for analysis. Kaggle. Retrieved November 11, 2024, from https://www.kaggle.com/datasets/sumansharmadataworld/depression-surveydataset-for-analysis/data
+
